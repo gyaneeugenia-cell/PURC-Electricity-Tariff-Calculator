@@ -1,0 +1,453 @@
+@model AdminDashboardViewModel
+@{
+    ViewData["Title"] = "Admin Dashboard";
+    var isComponentRecordKind = string.Equals(
+        Model.TariffUpdate.RecordKind,
+        TariffAdminRecordKinds.TariffComponent,
+        StringComparison.Ordinal);
+
+    var authenticationGroups = Model.AuditLogs
+        .Where(log => IsAuthenticationAction(log.ActionName))
+        .GroupBy(log => NormalizeAuthenticationAction(log.ActionName))
+        .OrderBy(group => GetAuthenticationGroupOrder(group.Key))
+        .ToList();
+}
+
+<section class="panel">
+    <div class="panel-heading">
+        <h2>Admin Dashboard</h2>
+        <p class="panel-subtitle">Manage user access, update live tariffs, review audit activity, and monitor who changed or deleted records.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="message-banner error-banner">@Model.ErrorMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="message-banner success-banner">@Model.SuccessMessage</div>
+    }
+
+    <div class="panel admin-create-user-card">
+        <div class="panel-heading">
+            <h3>Create User</h3>
+            <p class="panel-subtitle">Create a new application user and assign an access role.</p>
+        </div>
+
+        <form asp-action="CreateUser" method="post" class="admin-create-user-form">
+            @Html.AntiForgeryToken()
+
+            <div class="admin-create-user-grid">
+                <div class="field-group compact-field">
+                    <label for="displayName">Name</label>
+                    <input type="text" id="displayName" name="displayName" required />
+                </div>
+
+                <div class="field-group compact-field">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required />
+                </div>
+
+                <div class="field-group compact-field">
+                    <label for="password">Password</label>
+                    <div class="password-shell">
+                        <input type="password" id="password" name="password" required autocomplete="new-password" />
+                        <button type="button" class="password-toggle" data-password-toggle="password">Show</button>
+                    </div>
+                </div>
+
+                <div class="field-group compact-field">
+                    <label for="roleName">Role</label>
+                    <select id="roleName" name="roleName" required>
+                        <option value="User">User</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="actions-row">
+                <button type="submit" class="primary-button">Create User</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="panel admin-tariff-card">
+        <div class="panel-heading panel-heading-split">
+            <div>
+                <h3>Update Tariff Database</h3>
+                <p class="panel-subtitle">Add a new tariff rate or update an existing tariff component, tax, or levy directly from this dashboard.</p>
+            </div>
+            <button type="button" class="secondary-button" id="toggleDatabaseUpdateButton">Update Database</button>
+        </div>
+
+        <div class="admin-database-panel-body is-hidden" id="databaseUpdatePanel">
+            <div class="admin-warning-box">
+                <strong>Live database update</strong>
+                <p>Changes submitted here write directly to the tariff database and immediately affect tariff lookup inside the portal.</p>
+                <p>For a brand-new tariff period, save at least one tariff component first so the new period appears in the calculator selector.</p>
+            </div>
+
+            <form asp-action="UpdateTariff"
+                  method="post"
+                  class="admin-tariff-form"
+                  data-confirm-message="Are you sure you want to update database? This will change the live tariff records.">
+                @Html.AntiForgeryToken()
+
+                <div class="admin-tariff-grid">
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.CalendarYear">Calendar Year</label>
+                        <input asp-for="TariffUpdate.CalendarYear" type="number" min="1990" max="2100" inputmode="numeric" data-sanitize-number="integer" />
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.Period">Effective Period</label>
+                        <input asp-for="TariffUpdate.Period" placeholder="Example: Q3 2026 (July)" />
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.Category">Category</label>
+                        <select asp-for="TariffUpdate.Category">
+                            @foreach (var category in Model.TariffCategoryChoices)
+                            {
+                                <option value="@category.Code">@category.Label</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.RecordKind">Update Type</label>
+                        <select asp-for="TariffUpdate.RecordKind" id="tariffRecordKind">
+                            <option value="@TariffAdminRecordKinds.TariffComponent">Tariff Component</option>
+                            <option value="@TariffAdminRecordKinds.Tax">Tax</option>
+                            <option value="@TariffAdminRecordKinds.Levy">Levy</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.Rate">Rate</label>
+                        <input asp-for="TariffUpdate.Rate" type="text" inputmode="decimal" data-sanitize-number="decimal" />
+                    </div>
+                </div>
+
+                <div class="admin-tariff-grid admin-tariff-section@(isComponentRecordKind ? string.Empty : " is-hidden")" data-tariff-editor-section="component">
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.ComponentType">Component Type</label>
+                        <input asp-for="TariffUpdate.ComponentType" list="adminComponentTypeList" placeholder="Select or type the database component name" />
+                        <small class="field-hint">Examples: <code>energy</code>, <code>service_charge</code>, <code>energy_lv</code>, <code>energy_ev_charging</code>.</small>
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.Unit">Measure Unit</label>
+                        <input asp-for="TariffUpdate.Unit" placeholder="Example: GHS/kWh or GHS/month" />
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.Notes">Notes</label>
+                        <input asp-for="TariffUpdate.Notes" placeholder="Optional remarks for this tariff row" />
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.BlockStart">Block Start</label>
+                        <input asp-for="TariffUpdate.BlockStart" type="number" min="0" inputmode="numeric" data-sanitize-number="integer" />
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.BlockEnd">Block End</label>
+                        <input asp-for="TariffUpdate.BlockEnd" type="number" min="0" inputmode="numeric" data-sanitize-number="integer" />
+                    </div>
+                </div>
+
+                <div class="admin-tariff-grid admin-tariff-section@(!isComponentRecordKind ? string.Empty : " is-hidden")" data-tariff-editor-section="charge">
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.ChargeName">Tax / Levy Name</label>
+                        <input asp-for="TariffUpdate.ChargeName" placeholder="Example: Tax, Levies, ECG levy" />
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.Unit">Unit</label>
+                        <input asp-for="TariffUpdate.Unit" placeholder="Example: percentage or GHS/kWh" />
+                    </div>
+
+                    <div class="field-group compact-field">
+                        <label asp-for="TariffUpdate.Notes">Notes</label>
+                        <input asp-for="TariffUpdate.Notes" placeholder="Optional remarks for this tax or levy row" />
+                    </div>
+                </div>
+
+                <datalist id="adminComponentTypeList">
+                    @foreach (var componentType in Model.ComponentTypeSuggestions)
+                    {
+                        <option value="@componentType"></option>
+                    }
+                </datalist>
+
+                <div class="actions-row">
+                    <button type="submit" class="primary-button">Update Tariff</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="admin-shell">
+        <div class="admin-grid">
+            <div class="panel">
+                <div class="panel-heading">
+                    <h3>Users</h3>
+                    <p class="panel-subtitle">Active and deleted application accounts with role and usage timestamps.</p>
+                </div>
+
+                <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in Model.Users)
+                            {
+                                <tr>
+                                    <td class="admin-user-cell">
+                                        <strong>@user.DisplayName</strong>
+                                        <small class="field-hint admin-inline-timestamp">Created @user.CreatedAt.ToString("dd MMM yyyy HH:mm")</small>
+                                    </td>
+                                    <td class="admin-email-cell">
+                                        <span class="admin-email-line" title="@user.Email">@user.Email</span>
+                                        @if (user.DeletedAt is not null)
+                                        {
+                                            <small class="field-hint admin-inline-timestamp">Deleted @user.DeletedAt.Value.ToString("dd MMM yyyy HH:mm") by @user.DeletedByEmail</small>
+                                        }
+                                    </td>
+                                    <td>@user.RoleName</td>
+                                    <td>@(user.IsDeleted ? "Deleted" : "Active")</td>
+                                    <td class="admin-last-login-cell">@(user.LastLoginAt?.ToString("dd MMM yyyy HH:mm") ?? "Never")</td>
+                                    <td>
+                                        <div class="admin-actions">
+                                            @if (!user.IsDeleted)
+                                            {
+                                                <form asp-action="UpdateRole" method="post" data-confirm-message="Are you sure you want to update this user's role?">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="targetEmail" value="@user.Email" />
+                                                    <select name="roleName" class="admin-select-control">
+                                                        <option value="User" selected="@(user.RoleName == "User" ? "selected" : null)">User</option>
+                                                        <option value="Admin" selected="@(user.RoleName == "Admin" ? "selected" : null)">Admin</option>
+                                                    </select>
+                                                    <button type="submit" class="admin-action-button">Update Role</button>
+                                                </form>
+
+                                                <form asp-action="DeleteUser" method="post" data-confirm-message="Are you sure you want to permanently delete this user?">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="targetEmail" value="@user.Email" />
+                                                    <button type="submit" class="admin-action-button">Delete User</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-heading">
+                    <h3>Authentication Records</h3>
+                </div>
+
+                <div class="audit-log-list">
+                    @if (authenticationGroups.Count == 0)
+                    {
+                        <div class="audit-log-card">
+                            <div class="audit-log-empty">No authentication records captured yet.</div>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var group in authenticationGroups)
+                        {
+                            <div class="audit-log-card audit-log-group-card">
+                                <strong>@group.Key</strong>
+                                <div class="audit-log-group-list">
+                                    @foreach (var log in group.OrderByDescending(item => item.HappenedAt))
+                                    {
+                                        var recordUser = string.IsNullOrWhiteSpace(log.ActorEmail)
+                                            ? (string.IsNullOrWhiteSpace(log.TargetEmail) ? "System" : log.TargetEmail!)
+                                            : log.ActorEmail!;
+
+                                        <div class="audit-log-entry">
+                                            <span class="audit-log-entry-user" title="@recordUser">@recordUser</span>
+                                            <span class="audit-log-entry-time">@log.HappenedAt.ToString("dd MMM yyyy HH:mm:ss")</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const recordKindSelect = document.getElementById("tariffRecordKind");
+
+    const componentSection = document.querySelector("[data-tariff-editor-section='component']");
+    const chargeSection = document.querySelector("[data-tariff-editor-section='charge']");
+
+    const componentRateInput = document.getElementById("tariffComponentRate");
+    const chargeRateInput = document.getElementById("tariffChargeRate");
+
+    const chargeRateLabel = document.getElementById("tariffChargeRateLabel");
+    const chargeRateHint = document.getElementById("tariffChargeRateHint");
+
+    const chargeNameLabel = document.getElementById("tariffChargeNameLabel");
+    const chargeNameInput = document.getElementById("tariffChargeNameInput");
+
+    const chargeUnitLabel = document.getElementById("tariffChargeUnitLabel");
+    const chargeUnitInput = document.getElementById("tariffChargeUnitInput");
+
+    function refreshTariffEditor() {
+        if (!recordKindSelect) {
+            return;
+        }
+
+        const selectedType = recordKindSelect.value;
+
+        const isTariffComponent = selectedType === "@TariffAdminRecordKinds.TariffComponent";
+        const isTax = selectedType === "@TariffAdminRecordKinds.Tax";
+        const isLevy = selectedType === "@TariffAdminRecordKinds.Levy";
+
+        if (componentSection) {
+            componentSection.classList.toggle("is-hidden", !isTariffComponent);
+        }
+
+        if (chargeSection) {
+            chargeSection.classList.toggle("is-hidden", isTariffComponent);
+        }
+
+        if (componentRateInput) {
+            componentRateInput.disabled = !isTariffComponent;
+        }
+
+        if (chargeRateInput) {
+            chargeRateInput.disabled = isTariffComponent;
+        }
+
+        if (isTax) {
+            if (chargeRateLabel) {
+                chargeRateLabel.textContent = "Tax Rate";
+            }
+
+            if (chargeRateHint) {
+                chargeRateHint.textContent = "Enter 0.20 for 20%, or 0.05 for 5%.";
+            }
+
+            if (chargeNameLabel) {
+                chargeNameLabel.textContent = "Tax Name";
+            }
+
+            if (chargeNameInput && !chargeNameInput.value) {
+                chargeNameInput.value = "Tax";
+            }
+
+            if (chargeUnitLabel) {
+                chargeUnitLabel.textContent = "Unit";
+            }
+
+            if (chargeUnitInput && !chargeUnitInput.value) {
+                chargeUnitInput.value = "percentage";
+            }
+        }
+
+        if (isLevy) {
+            if (chargeRateLabel) {
+                chargeRateLabel.textContent = "Levy Rate";
+            }
+
+            if (chargeRateHint) {
+                chargeRateHint.textContent = "Enter 0.05 for 5%, or 0.00022 for GHS 0.00022/kWh.";
+            }
+
+            if (chargeNameLabel) {
+                chargeNameLabel.textContent = "Levy Name";
+            }
+
+            if (chargeNameInput && !chargeNameInput.value) {
+                chargeNameInput.value = "Levies";
+            }
+
+            if (chargeUnitLabel) {
+                chargeUnitLabel.textContent = "Unit";
+            }
+
+            if (chargeUnitInput && !chargeUnitInput.value) {
+                chargeUnitInput.value = "percentage";
+            }
+        }
+    }
+
+    if (recordKindSelect) {
+        recordKindSelect.addEventListener("change", refreshTariffEditor);
+        refreshTariffEditor();
+    }
+});
+</script>
+
+@functions {
+    private static bool IsAuthenticationAction(string? actionName)
+    {
+        if (string.IsNullOrWhiteSpace(actionName))
+        {
+            return false;
+        }
+
+        return NormalizeAuthenticationAction(actionName) is "LOGIN" or "REGISTER" or "LOGOUT";
+    }
+
+    private static string NormalizeAuthenticationAction(string? actionName)
+    {
+        var normalized = (actionName ?? string.Empty).Trim().ToUpperInvariant();
+
+        if (normalized.Contains("LOGIN", StringComparison.Ordinal))
+        {
+            return "LOGIN";
+        }
+
+        if (normalized.Contains("REGISTER", StringComparison.Ordinal) ||
+            normalized.Contains("SIGNUP", StringComparison.Ordinal) ||
+            normalized.Contains("SIGN_UP", StringComparison.Ordinal))
+        {
+            return "REGISTER";
+        }
+
+        if (normalized.Contains("LOGOUT", StringComparison.Ordinal) ||
+            normalized.Contains("SIGNOUT", StringComparison.Ordinal) ||
+            normalized.Contains("SIGN_OUT", StringComparison.Ordinal))
+        {
+            return "LOGOUT";
+        }
+
+        return normalized;
+    }
+
+    private static int GetAuthenticationGroupOrder(string actionName)
+    {
+        return actionName switch
+        {
+            "LOGIN" => 0,
+            "REGISTER" => 1,
+            "LOGOUT" => 2,
+            _ => 9,
+        };
+    }
+
+}

@@ -1,0 +1,71 @@
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+    var isDashboardActive = string.Equals(currentController, "Home", StringComparison.OrdinalIgnoreCase);
+    var isChangePasswordActive =
+        string.Equals(currentController, "Account", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(currentAction, "ChangePassword", StringComparison.OrdinalIgnoreCase);
+    var isAdminActive = string.Equals(currentController, "Admin", StringComparison.OrdinalIgnoreCase);
+    var isSignInActive =
+        string.Equals(currentController, "Account", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(currentAction, "Login", StringComparison.OrdinalIgnoreCase);
+    var isRegisterActive =
+        string.Equals(currentController, "Account", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(currentAction, "Register", StringComparison.OrdinalIgnoreCase);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - PURC Electricity Tariff Analytics & Reckoner Portal</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="top-nav">
+        <div class="top-nav-shell">
+            <a asp-controller="Home" asp-action="Index" class="top-nav-brand">
+                PURC Electricity Tariff Analytics & Reckoner Portal
+            </a>
+
+            <div class="top-nav-actions">
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <span class="top-nav-user">
+                        @User.Identity.Name
+                        @if (User.IsInRole("Admin"))
+                        {
+                            <strong class="role-chip">Admin</strong>
+                        }
+                    </span>
+
+                    <a asp-controller="Home" asp-action="Index" class="nav-link @(isDashboardActive ? "is-active" : null)">Dashboard</a>
+                    <a asp-controller="Account" asp-action="ChangePassword" class="nav-link @(isChangePasswordActive ? "is-active" : null)">Change Password</a>
+
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <a asp-controller="Admin" asp-action="Index" class="nav-link @(isAdminActive ? "is-active" : null)">Admin</a>
+                    }
+
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="nav-logout-form">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="nav-link nav-link-button">Sign Out</button>
+                    </form>
+                }
+                else
+                {
+                    <a asp-controller="Account" asp-action="Login" class="nav-link @(isSignInActive ? "is-active" : null)">Sign In</a>
+                    <a asp-controller="Account" asp-action="Register" class="nav-link nav-link-strong @(isRegisterActive ? "is-active" : null)">Register</a>
+                }
+            </div>
+        </div>
+    </header>
+
+    <main class="app-shell">
+        @RenderBody()
+    </main>
+
+    <script src="~/js/app.js" asp-append-version="true"></script>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

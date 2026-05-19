@@ -1,0 +1,1245 @@
+@using System.Text
+@model CalculatorPageViewModel
+@{
+    ViewData["Title"] = "PURC Electricity Tariff Reckoner";
+
+    var chartModel = ChartLayoutService.BuildBillTrendChart(Model.TrendRows);
+    var periodsForSelectedYear = Model.AllPeriods
+        .Where(item => item.CalendarYear == Model.SelectedCalendarYear)
+        .OrderBy(item => item.YearId)
+        .ToList();
+    var orderedTrendYears = Model.TrendYears
+        .Distinct()
+        .OrderBy(value => value)
+        .ToList();
+    var showDemandField = TariffCategoryRules.RequiresSltDemand(
+        Model.SelectedCategory,
+        Model.SelectedCalendarYear,
+        Model.SelectedPeriod);
+    var trendDemandYears = new List<(int Year, string Period)>();
+    var trendCsvHref = string.Empty;
+    var trendCsvFileName = string.Empty;
+
+    if (Model.TrendCategory.StartsWith("SLT", StringComparison.OrdinalIgnoreCase))
+    {
+        foreach (var trendYear in orderedTrendYears)
+        {
+            var selectedTrendPeriod = Model.TrendPeriodByYear.TryGetValue(trendYear, out var configuredPeriod)
+                ? configuredPeriod
+                : Model.AllPeriods
+                    .Where(item => item.CalendarYear == trendYear)
+                    .OrderBy(item => item.YearId)
+                    .LastOrDefault()?.Period ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(selectedTrendPeriod) &&
+                TariffCategoryRules.RequiresSltDemand(
+                    Model.TrendCategory,
+                    trendYear,
+                    selectedTrendPeriod))
+            {
+                trendDemandYears.Add((trendYear, selectedTrendPeriod));
+            }
+        }
+    }
+
+    if (Model.HasTrend)
+    {
+        var csvBuilder = new StringBuilder();
+        csvBuilder.AppendLine("Year,Period,Category,Consumption (kWh),Max Demand (kVA),Total Bill (GHS)");
+
+        foreach (var row in Model.TrendRows.OrderBy(item => item.CalendarYear))
+        {
+            csvBuilder.AppendLine(string.Join(",",
+                CsvEscape(row.CalendarYear.ToString()),
+                CsvEscape(row.Period),
+                CsvEscape(row.Category),
+                CsvEscape(row.ConsumptionKwh.ToString("N2")),
+                CsvEscape(row.DemandKva?.ToString("N2") ?? "-"),
+                CsvEscape(row.TotalBill.ToString("N2"))));
+        }
+
+        trendCsvHref = $"data:text/csv;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(csvBuilder.ToString()))}";
+        var trendStartYear = Model.TrendRows.Min(item => item.CalendarYear);
+        var trendEndYear = Model.TrendRows.Max(item => item.CalendarYear);
+        trendCsvFileName = $"{Model.TrendCategory.ToLowerInvariant().Replace(" ", "_").Replace("/", "_")}_trend_{trendStartYear}_{trendEndYear}.csv";
+    }
+
+    var hasTrendSummary = Model.TrendRows.Count >= 2;
+    var firstTrendRow = hasTrendSummary ? Model.TrendRows.First() : null;
+    var lastTrendRow = hasTrendSummary ? Model.TrendRows.Last() : null;
+    var trendAbsoluteChange = hasTrendSummary && firstTrendRow is not null && lastTrendRow is not null
+        ? lastTrendRow.TotalBill - firstTrendRow.TotalBill
+        : 0m;
+    var trendPercentageChange = hasTrendSummary && firstTrendRow is not null && firstTrendRow.TotalBill != 0m
+        ? (trendAbsoluteChange / firstTrendRow.TotalBill) * 100m
+        : 0m;
+    var trendChangeClass = trendAbsoluteChange > 0m
+        ? "positive"
+        : trendAbsoluteChange < 0m
+            ? "negative"
+            : "neutral";
+    var trendAbsoluteChangeText = FormatSignedAmount(trendAbsoluteChange);
+    var trendPercentageChangeText = FormatSignedPercentage(trendPercentageChange);
+    var selectedRateRows = Model.SelectedTariffBundle is not null
+        ? BuildTariffRateDisplayRows(Model.SelectedCategory, Model.SelectedTariffBundle.Components)
+        : Array.Empty<TariffRateDisplayRow>();
+    var calculationFlowText = Model.CalculationResult is not null
+        ? GetCalculationFlowText(Model.CalculationResult.IsReverseCalculation)
+        : GetCalculationFlowText(string.Equals(Model.Mode, "TotalBill", StringComparison.OrdinalIgnoreCase));
+    var taxBasisNote = BuildTaxBasisNote(Model.SelectedTariffBundle);
+    var levyBasisNote = BuildLevyBasisNote(Model.SelectedCalendarYear, Model.SelectedTariffBundle);
+    var currentUserDisplayName = User.Identity?.Name ?? "Unknown user";
+}
+
+<header class="purc-hero">
+    <div class="purc-ribbon">
+        <span>PUBLIC UTILITIES REGULATORY COMMISSION</span>
+        <span>Protecting the interest of consumers and utility service providers</span>
+    </div>
+    <div class="purc-brand-card">
+        <div class="purc-brand">
+            <img src="@Url.Content("~/images/purc_logo.png")" alt="PURC logo" class="purc-logo" />
+            <div class="purc-brand-copy">
+                <h1>PURC Electricity Tariff Reckoner</h1>
+                <p>Tariff reckoning, reverse billing, bill breakdown printing, and multi-year comparison platform.</p>
+            </div>
+        </div>
+    </div>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="message-banner error-banner">@Model.ErrorMessage</div>
+}
+
+<section class="panel panel-config">
+    <form asp-action="Calculate" method="post" class="config-grid" id="calculatorForm">
+        @Html.AntiForgeryToken()
+
+        <div class="field-group compact-field">
+            <label for="SelectedCalendarYear">Year</label>
+            <select asp-for="SelectedCalendarYear" id="calendarYearSelect" data-refresh-on-change="true">
+                @foreach (var year in Model.AvailableYears)
+                {
+                    <option value="@year">@year</option>
+                }
+            </select>
+        </div>
+
+        <div class="field-group compact-field">
+            <label for="SelectedPeriod">Tariff Effective Period</label>
+            <select asp-for="SelectedPeriod" id="periodSelect" data-refresh-on-change="true">
+                @foreach (var periodItem in periodsForSelectedYear)
+                {
+                    <option value="@periodItem.Period" data-year-id="@periodItem.YearId">@periodItem.Period</option>
+                }
+            </select>
+            <input asp-for="SelectedYearId" type="hidden" id="selectedYearId" />
+        </div>
+
+        <div class="field-group compact-field">
+            <label for="SelectedCategory">Category</label>
+            <select asp-for="SelectedCategory" id="categorySelect" data-refresh-on-change="true">
+                @foreach (var category in Model.AvailableCategories)
+                {
+                    <option value="@category.Code">@category.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="field-group compact-field preference-field">
+            <label>Preference</label>
+            <div class="preference-cards" id="modeCards">
+                <label class="preference-card @(string.Equals(Model.Mode, "Consumption", StringComparison.OrdinalIgnoreCase) ? "is-selected" : null)">
+                    <input asp-for="Mode" type="radio" value="Consumption" />
+                    <span class="preference-card-icon">&#9889;</span>
+                    <span class="preference-card-copy">
+                        <strong>Consumption</strong>
+                        <small>Bill from kWh input</small>
+                    </span>
+                </label>
+                <label class="preference-card @(string.Equals(Model.Mode, "TotalBill", StringComparison.OrdinalIgnoreCase) ? "is-selected" : null)">
+                    <input asp-for="Mode" type="radio" value="TotalBill" />
+                    <span class="preference-card-icon">&#8373;</span>
+                    <span class="preference-card-copy">
+                        <strong>Total Bill</strong>
+                        <small>Reverse-calculate kWh</small>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <div class="field-group compact-field" id="consumptionField" style="display:@(string.Equals(Model.Mode, "Consumption", StringComparison.OrdinalIgnoreCase) ? "flex" : "none")">
+            <label for="ConsumptionKwh">Monthly Consumption (kWh)</label>
+            <input asp-for="ConsumptionKwh" type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" data-sanitize-number="decimal" />
+        </div>
+
+        <div class="field-group compact-field" id="totalBillField" style="display:@(string.Equals(Model.Mode, "TotalBill", StringComparison.OrdinalIgnoreCase) ? "flex" : "none")">
+            <label for="TotalBillInput">Total Monthly Bill (GHS)</label>
+            <input asp-for="TotalBillInput" type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" data-sanitize-number="decimal" />
+        </div>
+
+        <div class="field-group compact-field" id="demandField" style="display:@(showDemandField ? "flex" : "none")">
+            <label for="DemandKva">Maximum Demand (kVA)</label>
+            <input asp-for="DemandKva" type="number" step="1" min="0" inputmode="numeric" data-sanitize-number="integer" />
+        </div>
+
+        <div class="actions-row config-actions">
+            <button type="submit" class="primary-button">Calculate</button>
+            <input asp-for="ShowTrendTools" type="checkbox" id="ShowTrendTools" class="visually-hidden" />
+            <label for="ShowTrendTools" class="primary-button trend-tool-button @(Model.ShowTrendTools ? "is-active" : null)">
+                <span class="trend-tool-button-icon">&#128200;</span>
+                <span>Bill Trend Tool</span>
+            </label>
+            @if (Model.HasResults)
+            {
+                <button type="button" class="secondary-button" onclick="window.print()">Print Bill Breakdown</button>
+            }
+        </div>
+    </form>
+</section>
+
+@if (Model.SelectedTariffBundle is not null)
+{
+    <section class="panel rates-inspector-panel">
+        <div class="panel-heading panel-heading-split">
+            <div>
+                <h2>Selected Tariff Rates</h2>
+                <p class="panel-subtitle">@Model.SelectedCalendarYear | @Model.SelectedPeriod | @Model.SelectedCategory</p>
+            </div>
+            <button type="button" class="secondary-button" id="toggleRatesButton">Show Tariff Rates</button>
+        </div>
+
+        <div class="rates-panel-body is-hidden" id="tariffRatesPanel">
+            <div class="rates-meta-grid">
+                <div class="rate-meta-card">
+                    <span>Year</span>
+                    <strong>@Model.SelectedCalendarYear</strong>
+                </div>
+                <div class="rate-meta-card">
+                    <span>Effective Period</span>
+                    <strong>@Model.SelectedPeriod</strong>
+                </div>
+                <div class="rate-meta-card">
+                    <span>Category</span>
+                    <strong>@Model.SelectedCategory</strong>
+                </div>
+                <div class="rate-meta-card">
+                    <span>Timestamp</span>
+                    <strong>@Model.PageTimestamp.ToString("dd MMM yyyy HH:mm:ss")</strong>
+                </div>
+            </div>
+
+            <div class="rates-tables-grid">
+                <div class="rates-table-column">
+                    <div class="rates-table-card rates-table-card-wide">
+                        <h3>Tariff Components</h3>
+                        <table class="rate-sheet-table rate-component-table">
+                            <colgroup>
+                                <col class="rate-sheet-category-col" />
+                                <col class="rate-sheet-measure-col" />
+                                <col class="rate-sheet-tariff-col" />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>Customer Category</th>
+                                    <th>Measure</th>
+                                    <th>Tariff</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="rate-effective-row">
+                                    <td></td>
+                                    <td></td>
+                                    <td class="rate-effective-value">@Model.SelectedPeriod</td>
+                                </tr>
+                                @foreach (var row in selectedRateRows)
+                                {
+                                    if (row.IsSection)
+                                    {
+                                        <tr class="rate-section-row">
+                                            <td>@row.CustomerCategory</td>
+                                            <td></td>
+                                            <td></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr>
+                                            <td>@row.CustomerCategory</td>
+                                            <td>@row.Measure</td>
+                                            <td>@row.NewTariff</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="rates-table-card">
+                        <h3>Taxes and Levies</h3>
+                        <table class="rate-sheet-table rate-sheet-table-compact">
+                            <colgroup>
+                                <col class="rate-sheet-tax-charge-col" />
+                                <col class="rate-sheet-tax-rate-col" />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>Charge</th>
+                                    <th>Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.SelectedTariffBundle.Tax is not null)
+                                {
+                                    <tr>
+                                        <td>Tax</td>
+                                        <td>@FormatRatePercentage(Model.SelectedTariffBundle.Tax.TaxRate)</td>
+                                    </tr>
+                                }
+                                @foreach (var levy in Model.SelectedTariffBundle.Levies)
+                                {
+                                    <tr>
+                                        <td>@levy.LevyName</td>
+                                        <td>@FormatLevyDisplay(Model.SelectedCalendarYear, levy)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <div class="rates-note-stack">
+                            <p class="rates-note">@taxBasisNote</p>
+                            <p class="rates-note">@levyBasisNote</p>
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="rates-visual-stage" aria-hidden="true">
+                    <div class="tariff-motion-card tariff-motion-card-minimal @GetMotionVariantClass(Model.SelectedCategory)" data-tilt-card>
+                        <div class="tariff-motion-stage">
+                            <span class="tariff-motion-shadow"></span>
+                            <span class="tariff-motion-orb"></span>
+                            <span class="tariff-motion-ring tariff-motion-ring-one"></span>
+                            <span class="tariff-motion-ring tariff-motion-ring-two"></span>
+                            <span class="tariff-motion-glyph">@Html.Raw(GetAnimatedVisualMarkup(Model.SelectedCategory))</span>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </section>
+}
+
+@if (Model.HasResults && Model.CalculationResult is not null)
+{
+    <section class="results-layout">
+        <div class="panel breakdown-panel">
+            <h2>Bill Breakdown</h2>
+            <div class="bill-breakdown-meta">
+                <div class="bill-breakdown-meta-item">
+                    <span>Prepared By</span>
+                    <strong>@currentUserDisplayName</strong>
+                </div>
+                <div class="bill-breakdown-meta-item">
+                    <span>Tariff Period</span>
+                    <strong>@Model.CalculationResult.Period</strong>
+                </div>
+                <div class="bill-breakdown-meta-item">
+                    <span>Printed</span>
+                    <strong>@Model.PageTimestamp.ToString("dd MMM yyyy HH:mm:ss")</strong>
+                </div>
+            </div>
+            <table class="breakdown-table">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in Model.CalculationResult.Breakdown)
+                    {
+                        <tr>
+                            <td>@line.Label</td>
+                            <td>GHS @line.Amount.ToString("N2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel results-panel">
+            <h2>Results</h2>
+            <div class="category-chip">
+                <span class="category-chip-icon">@Html.Raw(GetCategoryIconMarkup(Model.CalculationResult.Category))</span>
+                <span>@Model.CalculationResult.Category</span>
+            </div>
+
+            <div class="results-meta-grid">
+                <div class="result-meta-card">
+                    <span>Year</span>
+                    <strong>@Model.CalculationResult.CalendarYear</strong>
+                </div>
+                <div class="result-meta-card">
+                    <span>Effective Tariff Period</span>
+                    <strong>@Model.CalculationResult.Period</strong>
+                </div>
+                <div class="result-meta-card">
+                    <span>Preference</span>
+                    <strong>@calculationFlowText</strong>
+                </div>
+                <div class="result-meta-card">
+                    <span>Timestamp</span>
+                    <strong>@Model.PageTimestamp.ToString("dd MMM yyyy HH:mm:ss")</strong>
+                </div>
+            </div>
+
+            <div class="metric-stack">
+                <div class="metric-block">
+                    <div class="metric-label">Total Bill (GHS)</div>
+                    <div class="metric-value">@Model.CalculationResult.TotalBill.ToString("N2")</div>
+                </div>
+
+                <div class="metric-block">
+                    <div class="metric-label">
+                        @(Model.CalculationResult.IsReverseCalculation ? "Estimated Consumption (kWh)" : "Consumption (kWh)")
+                    </div>
+                    <div class="metric-value">@Model.CalculationResult.ConsumptionKwh.ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+    </section>
+}
+
+<section class="panel trend-panel @(Model.ShowTrendTools ? string.Empty : "is-hidden")" id="trendToolsPanel">
+    <div class="panel-heading panel-heading-split">
+        <div>
+            <h2>Bill Trend</h2>
+            <p class="panel-subtitle">Compare how the total bill changes across years for the same consumption level.</p>
+        </div>
+        <button type="button" class="secondary-button" id="closeTrendToolsButton">Close Trend Tools</button>
+    </div>
+
+    <form asp-action="Trend" method="post" class="trend-grid" id="trendForm">
+        @Html.AntiForgeryToken()
+        <input asp-for="SelectedCalendarYear" type="hidden" />
+        <input asp-for="SelectedYearId" type="hidden" />
+        <input asp-for="SelectedPeriod" type="hidden" />
+        <input asp-for="SelectedCategory" type="hidden" />
+        <input asp-for="Mode" type="hidden" />
+        <input asp-for="ConsumptionKwh" type="hidden" />
+        <input asp-for="TotalBillInput" type="hidden" />
+        <input asp-for="DemandKva" type="hidden" />
+        <input asp-for="ShowTrendTools" type="hidden" value="true" />
+
+        <div class="field-group compact-field">
+            <label for="TrendCategory">Trend Category</label>
+            <select asp-for="TrendCategory" id="TrendCategory" class="trend-refresh-control">
+                @foreach (var category in Model.AvailableCategories.Where(item => item.Code == "Residential" || item.Code == "Non-Residential" || item.Code.StartsWith("SLT", StringComparison.OrdinalIgnoreCase)))
+                {
+                    <option value="@category.Code">@category.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="field-group compact-field">
+            <label for="TrendConsumptionKwh">Trend Consumption (kWh)</label>
+            <input asp-for="TrendConsumptionKwh" type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" data-sanitize-number="decimal" />
+        </div>
+
+        <div class="field-group trend-years-field">
+            <label for="TrendYearsSelect">Years to Compare</label>
+            <select id="TrendYearsSelect" name="TrendYears" multiple size="6" class="trend-years-select trend-refresh-control">
+                @foreach (var year in Model.AvailableYears.OrderBy(value => value))
+                {
+                    <option value="@year" selected="@(Model.TrendYears.Contains(year) ? "selected" : null)">@year</option>
+                }
+            </select>
+            <small class="field-hint">Hold Ctrl while selecting multiple years.</small>
+        </div>
+
+        @if (orderedTrendYears.Count > 0)
+        {
+            <div class="trend-periods-grid">
+                @foreach (var trendYear in orderedTrendYears)
+                {
+                    var periodsForTrendYear = Model.AllPeriods
+                        .Where(item => item.CalendarYear == trendYear)
+                        .OrderBy(item => item.YearId)
+                        .ToList();
+                    var selectedTrendPeriod = Model.TrendPeriodByYear.TryGetValue(trendYear, out var configuredPeriod)
+                        ? configuredPeriod
+                        : periodsForTrendYear.LastOrDefault()?.Period ?? string.Empty;
+
+                    <div class="field-group compact-field">
+                        <label for="trend-period-@trendYear">@trendYear Tariff Period</label>
+                        <select id="trend-period-@trendYear" name="TrendPeriodByYear[@trendYear]" class="trend-period-select trend-refresh-control">
+                            @foreach (var trendPeriod in periodsForTrendYear)
+                            {
+                                <option value="@trendPeriod.Period" selected="@(string.Equals(trendPeriod.Period, selectedTrendPeriod, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@trendPeriod.Period</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="trend-options-row">
+            <div class="field-group checkbox-field trend-option-cell">
+                <label class="checkbox-label">
+                    <input asp-for="ShowTrendTable" type="checkbox" />
+                    <span>Show trend data table</span>
+                </label>
+            </div>
+        </div>
+
+        @if (trendDemandYears.Count > 0)
+        {
+            <div class="trend-demand-section">
+                <h3>Required Maximum Demand Inputs</h3>
+                <div class="trend-demand-grid">
+                    @foreach (var demandYear in trendDemandYears)
+                    {
+                        <div class="field-group compact-field">
+                            <label for="trend-demand-@demandYear.Year">@demandYear.Year Max Demand (kVA)</label>
+                            <input
+                                id="trend-demand-@demandYear.Year"
+                                type="number"
+                                step="1"
+                                min="0"
+                                inputmode="numeric"
+                                data-sanitize-number="integer"
+                                name="TrendDemandByYear[@demandYear.Year]"
+                                value="@(Model.TrendDemandByYear.TryGetValue(demandYear.Year, out var demand) ? demand.ToString("0.##") : "0")" />
+                            <small class="field-hint">@demandYear.Period</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="actions-row">
+            <button type="submit" class="primary-button">Generate Bill Trend</button>
+        </div>
+    </form>
+
+    @if (Model.HasTrend)
+    {
+        if (Model.ShowTrendTable)
+        {
+            <div class="trend-table-wrap">
+                <div class="panel-heading panel-heading-split trend-download-heading">
+                    <h3>Trend Table</h3>
+                    <a class="secondary-button button-link" href="@trendCsvHref" download="@trendCsvFileName">Export CSV</a>
+                </div>
+                <table class="breakdown-table trend-table">
+                    <thead>
+                        <tr>
+                            <th>Year</th>
+                            <th>Period</th>
+                            <th>Category</th>
+                            <th>Consumption (kWh)</th>
+                            <th>Max Demand (kVA)</th>
+                            <th>Total Bill (GHS)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.TrendRows)
+                        {
+                            <tr>
+                                <td>@row.CalendarYear</td>
+                                <td>@row.Period</td>
+                                <td>@row.Category</td>
+                                <td>@row.ConsumptionKwh.ToString("N2")</td>
+                                <td>@(row.DemandKva.HasValue ? row.DemandKva.Value.ToString("N2") : "-")</td>
+                                <td>@row.TotalBill.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <div class="chart-card">
+            <div class="chart-card-heading">
+                <h3>@Model.TrendCategory Bill Trend</h3>
+                <div class="chart-export-actions">
+                    <button type="button" class="secondary-button chart-export-button" data-chart-export="png">Export PNG</button>
+                    <button type="button" class="secondary-button chart-export-button" data-chart-export="jpeg">Export JPEG</button>
+                </div>
+            </div>
+            <svg viewBox="0 0 @chartModel.Width @chartModel.Height" class="trend-svg" role="img" aria-label="Bill trend chart">
+                @foreach (var tick in chartModel.YTicks)
+                {
+                    var plotHeight = chartModel.Height - chartModel.PlotTop - chartModel.PlotBottom;
+                    var normalized = chartModel.MaxY == chartModel.MinY ? 0.5m : (tick - chartModel.MinY) / (chartModel.MaxY - chartModel.MinY);
+                    var y = chartModel.PlotTop + plotHeight - (normalized * plotHeight);
+                    <line x1="@chartModel.PlotLeft" y1="@y" x2="@(chartModel.Width - chartModel.PlotRight)" y2="@y" class="grid-line"></line>
+                    @Html.Raw($"<text x=\"{(chartModel.PlotLeft - 12)}\" y=\"{(y + 5)}\" text-anchor=\"end\" class=\"axis-text\">{tick:N0}</text>")
+                }
+
+                <line x1="@chartModel.PlotLeft" y1="@chartModel.PlotTop" x2="@chartModel.PlotLeft" y2="@(chartModel.Height - chartModel.PlotBottom)" class="axis-line"></line>
+                <line x1="@chartModel.PlotLeft" y1="@(chartModel.Height - chartModel.PlotBottom)" x2="@(chartModel.Width - chartModel.PlotRight)" y2="@(chartModel.Height - chartModel.PlotBottom)" class="axis-line"></line>
+
+                <polyline points="@chartModel.PolylinePoints" class="trend-polyline"></polyline>
+
+                @foreach (var point in chartModel.Points)
+                {
+                    var labelText = point.Value.ToString("N2");
+                    var labelWidth = Math.Max(46m, labelText.Length * 7.4m);
+                    var labelHeight = 21m;
+                    var labelX = point.X - (labelWidth / 2m);
+                    var labelY = point.Y - chartModel.LabelOffset - 16m;
+
+                    <circle cx="@point.X" cy="@point.Y" r="7" class="trend-point"></circle>
+                    <rect x="@labelX" y="@labelY" width="@labelWidth" height="@labelHeight" rx="7" ry="7" class="point-label-bg"></rect>
+                    @Html.Raw($"<text x=\"{point.X}\" y=\"{(point.Y - chartModel.LabelOffset)}\" text-anchor=\"middle\" class=\"point-label\">{labelText}</text>")
+                    @Html.Raw($"<text x=\"{point.X}\" y=\"{(chartModel.Height - chartModel.PlotBottom + 28)}\" text-anchor=\"middle\" class=\"axis-text\">{point.Label}</text>")
+                }
+
+                @Html.Raw($"<text x=\"{(chartModel.Width / 2)}\" y=\"{(chartModel.Height - 10)}\" text-anchor=\"middle\" class=\"axis-title\">Year</text>")
+                @Html.Raw($"<text x=\"26\" y=\"{(chartModel.Height / 2)}\" text-anchor=\"middle\" class=\"axis-title\" transform=\"rotate(-90 26 {(chartModel.Height / 2)})\">Bill (GHS)</text>")
+            </svg>
+        </div>
+
+        @if (hasTrendSummary && firstTrendRow is not null && lastTrendRow is not null)
+        {
+            <div class="trend-summary-wrap">
+                <div class="trend-summary-card">
+                    <div class="trend-summary-label">First Bill (GHS)</div>
+                    <div class="trend-summary-value">@firstTrendRow.TotalBill.ToString("N2")</div>
+                    <div class="trend-summary-note neutral">Earliest selected year</div>
+                </div>
+                <div class="trend-summary-card">
+                    <div class="trend-summary-label">Latest Bill (GHS)</div>
+                    <div class="trend-summary-value">@lastTrendRow.TotalBill.ToString("N2")</div>
+                    <div class="trend-summary-note neutral">Most recent selected year</div>
+                </div>
+                <div class="trend-summary-card">
+                    <div class="trend-summary-label">Overall Change</div>
+                    <div class="trend-summary-value @trendChangeClass">@trendAbsoluteChangeText</div>
+                    <div class="trend-summary-note @trendChangeClass">@trendPercentageChangeText vs first bill</div>
+                </div>
+            </div>
+        }
+    }
+</section>
+
+@functions {
+    private sealed record TariffRateDisplayRow(
+        string CustomerCategory,
+        string Measure,
+        string NewTariff,
+        bool IsSection = false,
+        string? Detail = null);
+
+    private static string CsvEscape(string? value)
+    {
+        var safeValue = value ?? string.Empty;
+        if (safeValue.Contains('"') || safeValue.Contains(',') || safeValue.Contains('\n'))
+        {
+            return "\"" + safeValue.Replace("\"", "\"\"") + "\"";
+        }
+
+        return safeValue;
+    }
+
+    private static IReadOnlyList<TariffRateDisplayRow> BuildTariffRateDisplayRows(
+        string category,
+        IReadOnlyList<TariffComponent> components)
+    {
+        var orderedComponents = components
+            .OrderBy(GetComponentSortOrder)
+            .ThenBy(component => component.BlockStart ?? 0)
+            .ThenBy(component => component.BlockEnd ?? int.MaxValue)
+            .ToList();
+
+        var rows = new List<TariffRateDisplayRow>();
+
+        if (category.StartsWith("Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            rows.Add(new TariffRateDisplayRow("Residential Customer Group:", string.Empty, string.Empty, true));
+
+            var lifelineComponents = orderedComponents
+                .Where(component => component.ComponentType.Contains("lifeline", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var firstEnergyBand = orderedComponents
+                .FirstOrDefault(component =>
+                    component.ComponentType.Equals("energy", StringComparison.OrdinalIgnoreCase) &&
+                    component.BlockStart == 0 &&
+                    component.BlockEnd is <= 30);
+
+            if (firstEnergyBand is not null && !lifelineComponents.Contains(firstEnergyBand))
+            {
+                lifelineComponents.Insert(0, firstEnergyBand);
+            }
+
+            var otherResidentialComponents = orderedComponents
+                .Where(component => !lifelineComponents.Contains(component))
+                .ToList();
+
+            if (lifelineComponents.Count > 0)
+            {
+                rows.Add(new TariffRateDisplayRow("Lifeline Customers:", string.Empty, string.Empty, true));
+                rows.AddRange(lifelineComponents.Select(BuildTariffRateRow));
+            }
+
+            if (otherResidentialComponents.Count > 0)
+            {
+                rows.Add(new TariffRateDisplayRow("All Other Residential Customers:", string.Empty, string.Empty, true));
+                rows.AddRange(otherResidentialComponents.Select(BuildTariffRateRow));
+            }
+
+            return rows;
+        }
+
+        if (category.StartsWith("Non-Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            rows.Add(new TariffRateDisplayRow("Non-Residential Customers:", string.Empty, string.Empty, true));
+            rows.AddRange(orderedComponents.Select(BuildTariffRateRow));
+            return rows;
+        }
+
+        if (category.StartsWith("SLT", StringComparison.OrdinalIgnoreCase))
+        {
+            rows.Add(new TariffRateDisplayRow("Special Load Tariff (SLT) Customers:", string.Empty, string.Empty, true));
+            rows.Add(new TariffRateDisplayRow(GetSltCategoryHeading(category), string.Empty, string.Empty, true));
+
+            var energyComponent = orderedComponents
+                .FirstOrDefault(component => IsMatchingSltEnergyComponent(category, component));
+
+            var serviceComponent = orderedComponents
+                .FirstOrDefault(component => IsMatchingSltServiceComponent(category, component));
+
+            var demandComponent = orderedComponents
+                .FirstOrDefault(component => IsMatchingSltDemandComponent(category, component));
+
+            if (energyComponent is not null)
+            {
+                rows.Add(new TariffRateDisplayRow(
+                    "Energy Charge per kWh",
+                    GetMeasureText(energyComponent),
+                    energyComponent.Rate.ToString("N4"),
+                    false));
+            }
+
+            if (serviceComponent is not null)
+            {
+                rows.Add(new TariffRateDisplayRow(
+                    "Service Charge",
+                    GetMeasureText(serviceComponent),
+                    serviceComponent.Rate.ToString("N4"),
+                    false));
+            }
+
+            if (demandComponent is not null)
+            {
+                rows.Add(new TariffRateDisplayRow(
+                    "Maximum Demand Charge",
+                    GetMeasureText(demandComponent),
+                    demandComponent.Rate.ToString("N4"),
+                    false));
+            }
+
+            return rows;
+        }
+
+        if (category.StartsWith("EV", StringComparison.OrdinalIgnoreCase))
+        {
+            rows.Add(new TariffRateDisplayRow("EV Charging", string.Empty, string.Empty, true));
+            rows.AddRange(orderedComponents.Select(BuildTariffRateRow));
+            return rows;
+        }
+
+        rows.Add(new TariffRateDisplayRow(category, string.Empty, string.Empty, true));
+        rows.AddRange(orderedComponents.Select(BuildTariffRateRow));
+        return rows;
+    }
+
+    private static TariffRateDisplayRow BuildTariffRateRow(TariffComponent component)
+    {
+        return new TariffRateDisplayRow(
+            GetComponentDisplayName(component),
+            GetMeasureText(component),
+            component.Rate.ToString("N4"),
+            false,
+            string.IsNullOrWhiteSpace(component.Notes) ? null : component.Notes);
+    }
+
+    private static bool IsMatchingSltEnergyComponent(string category, TariffComponent component)
+    {
+        return MatchesLevelScopedComponent(category, component.ComponentType, "energy");
+    }
+
+    private static bool IsMatchingSltServiceComponent(string category, TariffComponent component)
+    {
+        return MatchesLevelScopedComponent(category, component.ComponentType, "service_charge");
+    }
+
+    private static bool IsMatchingSltDemandComponent(string category, TariffComponent component)
+    {
+        return MatchesLevelScopedComponent(category, component.ComponentType, "demand_charge");
+    }
+
+    private static bool MatchesLevelScopedComponent(string category, string componentType, string baseComponentType)
+    {
+        if (!category.StartsWith("SLT", StringComparison.OrdinalIgnoreCase) &&
+            !category.StartsWith("EV", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var normalizedType = componentType.ToLowerInvariant();
+        var normalizedLevel = TariffCategoryRules.GetRateLevel(category);
+        var preferredMatches = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            $"{baseComponentType}_{normalizedLevel}",
+        };
+
+        if (string.Equals(category, "SLT-MV", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(category, "SLT-MV-HV", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(category, "SLT-HV", StringComparison.OrdinalIgnoreCase))
+        {
+            preferredMatches.Add($"{baseComponentType}_mv_hv");
+        }
+
+        if (string.Equals(category, "SLT-MV2", StringComparison.OrdinalIgnoreCase))
+        {
+            preferredMatches.Add($"{baseComponentType}_mv2");
+            preferredMatches.Add($"{baseComponentType}_mv_hv");
+        }
+
+        return preferredMatches.Contains(normalizedType);
+    }
+
+    private static string GetTariffDisplayText(TariffRateDisplayRow row)
+    {
+        if (string.IsNullOrWhiteSpace(row.NewTariff))
+        {
+            return row.Measure;
+        }
+
+        if (string.IsNullOrWhiteSpace(row.Measure))
+        {
+            return row.NewTariff;
+        }
+
+        return $"{row.NewTariff} {row.Measure}";
+    }
+
+    private static string GetComponentDisplayName(TariffComponent component)
+    {
+        var componentType = component.ComponentType;
+
+        if (componentType.Contains("service_charge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Service Charge";
+        }
+
+        if (componentType.Contains("fixed_charge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Fixed Charge";
+        }
+
+        if (componentType.Contains("demand_charge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Maximum Demand Charge";
+        }
+
+        if (componentType.StartsWith("energy", StringComparison.OrdinalIgnoreCase))
+        {
+            if (component.BlockStart.HasValue || component.BlockEnd.HasValue)
+            {
+                return BuildBlockLabel(component);
+            }
+
+            return "Energy Charge per kWh";
+        }
+
+        return componentType.Replace("_", " ", StringComparison.Ordinal).Trim();
+    }
+
+    private static string GetMeasureText(TariffComponent component)
+    {
+        if (!string.IsNullOrWhiteSpace(component.Unit))
+        {
+            return component.Unit!;
+        }
+
+        if (component.ComponentType.Contains("service_charge", StringComparison.OrdinalIgnoreCase) ||
+            component.ComponentType.Contains("fixed_charge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GHS/Month";
+        }
+
+        if (component.ComponentType.Contains("demand_charge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GHS/kVA";
+        }
+
+        return "GHS/kWh";
+    }
+
+    private static string BuildBlockLabel(TariffComponent component)
+    {
+        if (component.BlockStart is null && component.BlockEnd is null)
+        {
+            return "Flat Rate";
+        }
+
+        if (component.BlockEnd is null)
+        {
+            return $"{component.BlockStart ?? 0}+ kWh";
+        }
+
+        if (component.ComponentType.Contains("lifeline", StringComparison.OrdinalIgnoreCase) &&
+            component.BlockStart == 0 &&
+            component.BlockEnd == 30)
+        {
+            return "0 - 30 kWh (Exclusive)";
+        }
+
+        return $"{component.BlockStart ?? 0}-{component.BlockEnd.Value} kWh";
+    }
+
+    private static int GetComponentSortOrder(TariffComponent component)
+    {
+        var type = component.ComponentType.ToLowerInvariant();
+
+        if (type.Contains("fixed_charge"))
+        {
+            return 1;
+        }
+
+        if (type.StartsWith("energy"))
+        {
+            return type.Contains("lifeline") ? 0 : 2;
+        }
+
+        if (type.Contains("service_charge"))
+        {
+            return type.Contains("lifeline") ? 1 : 3;
+        }
+
+        if (type.Contains("demand_charge"))
+        {
+            return 4;
+        }
+
+        return 9;
+    }
+
+    private static string GetSltCategoryHeading(string category)
+    {
+        return category.ToUpperInvariant() switch
+        {
+            "SLT-LV" => "Low Voltage - LV",
+            "SLT-MV" => "Medium Voltage - MV",
+            "SLT-MV-HV" => "Medium Voltage / High Voltage - MV / HV",
+            "SLT-MV2" => "Medium Voltage - MV-2",
+            "SLT-HV" => "High Voltage - HV",
+            "SLT-HV-MINES" => "High Voltage - Mines",
+            "SLT-HV-STEEL-COMPANIES" => "High Voltage - Steel Companies",
+            _ => category,
+        };
+    }
+
+    private static string GetCalculationFlowText(bool isReverseCalculation)
+    {
+        return isReverseCalculation
+            ? "Total Bill to Consumption"
+            : "Consumption to Total Bill";
+    }
+
+    private static string FormatSignedAmount(decimal value)
+    {
+        var sign = value > 0m ? "+" : value < 0m ? "-" : string.Empty;
+        return $"GHS {sign}{Math.Abs(value).ToString("N2")}";
+    }
+
+    private static string FormatSignedPercentage(decimal value)
+    {
+        var sign = value > 0m ? "+" : value < 0m ? "-" : string.Empty;
+        return $"{sign}{Math.Abs(value).ToString("N2")}%";
+    }
+
+    private static string FormatRatePercentage(decimal value)
+    {
+        var normalizedValue = Math.Abs(value) <= 1m ? value * 100m : value;
+        return $"{normalizedValue:N2}%";
+    }
+    private static string FormatLevyDisplay(int selectedCalendarYear, LevyRateRecord levy)
+    {
+    if (selectedCalendarYear == 1998)
+    {
+        return $"GHS {levy.LevyRate:N5}/kWh";
+    }
+
+    return FormatRatePercentage(levy.LevyRate);
+    }
+    private static string BuildTaxBasisNote(TariffBundle? bundle)
+    {
+        return "Tax is calculated as a percentage of the sum of energy charge and service charge.";
+    }
+
+    private static string BuildLevyBasisNote(int selectedCalendarYear, TariffBundle? bundle)
+    {
+        if (bundle is null || bundle.Levies.Count == 0)
+        {
+            return "Levies are applied as percentages of energy charge only.";
+        }
+
+        if (selectedCalendarYear <= 1998)
+        {
+            return "For this tariff year, levies are applied on the consumption basis defined for that period.";
+        }
+
+        return "Levies are applied as percentages of energy charge only.";
+    }
+
+    private static string GetMotionVariantClass(string key)
+    {
+        if (key.Contains("EV", StringComparison.OrdinalIgnoreCase))
+        {
+            return "is-ev";
+        }
+
+        if (key.StartsWith("Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            return "is-residential";
+        }
+
+        if (key.StartsWith("Non-Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            return "is-nonresidential";
+        }
+
+        if (key.StartsWith("SLT", StringComparison.OrdinalIgnoreCase))
+        {
+            return "is-slt";
+        }
+
+        return "is-generic";
+    }
+
+    private static string GetAnimatedVisualMarkup(string key)
+    {
+        if (key.Contains("EV", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"
+                <svg viewBox='0 0 160 160' class='tariff-scene tariff-scene-ev' aria-hidden='true' focusable='false'>
+                    <defs>
+                        <linearGradient id='evBodyGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#6ff2c7' />
+                            <stop offset='55%' stop-color='#15b783' />
+                            <stop offset='100%' stop-color='#0b7a5a' />
+                        </linearGradient>
+                        <linearGradient id='evRoofGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#d7fff2' />
+                            <stop offset='100%' stop-color='#7ce7c0' />
+                        </linearGradient>
+                        <linearGradient id='evGlassGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#f4fffb' />
+                            <stop offset='100%' stop-color='#9fe9d4' />
+                        </linearGradient>
+                        <linearGradient id='evWheelGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#23354d' />
+                            <stop offset='100%' stop-color='#0f172a' />
+                        </linearGradient>
+                    </defs>
+                    <g class='scene-object'>
+                        <path class='ev-road-mark ev-road-mark-one' d='M30 121h22' stroke='#dcfce7' stroke-width='5' stroke-linecap='round' opacity='.85' />
+                        <path class='ev-road-mark ev-road-mark-two' d='M110 121h20' stroke='#dcfce7' stroke-width='5' stroke-linecap='round' opacity='.72' />
+                        <g class='ev-car'>
+                            <path d='M46 93c7-16 19-26 40-26h18c12 0 22 6 29 20l5 10c3 7-2 14-10 14H52c-9 0-14-8-11-18Z' fill='url(#evBodyGrad)' />
+                            <path d='M72 66c5-10 14-16 26-16h16c11 0 20 5 26 16l4 8H107c-11 0-19-2-26-5-5-2-9-3-14-3Z' fill='url(#evRoofGrad)' />
+                            <path d='M80 57h29c9 0 16 4 21 12l4 5H103c-8 0-15-1-21-4-5-2-8-6-11-13Z' fill='url(#evGlassGrad)' opacity='.96' />
+                            <path d='M45 98h-8' stroke='#d7ecff' stroke-width='5' stroke-linecap='round' opacity='.7' />
+                            <path class='ev-headlight' d='M133 94h8' stroke='#fff8c5' stroke-width='6' stroke-linecap='round' />
+                            <path d='m96 83-7 11h8l-4 9 15-16h-8l4-10Z' fill='#f4fffb' opacity='.92' />
+                            <g class='ev-wheel' transform='translate(75 111)'>
+                                <circle cx='0' cy='0' r='12' fill='url(#evWheelGrad)' />
+                                <circle cx='0' cy='0' r='6.5' fill='#d9fff2' opacity='.92' />
+                                <path d='M0-8V8M-8 0H8M-6-6 6 6M6-6-6 6' stroke='#0b7a5a' stroke-width='2.2' stroke-linecap='round' />
+                            </g>
+                            <g class='ev-wheel' transform='translate(117 111)'>
+                                <circle cx='0' cy='0' r='12' fill='url(#evWheelGrad)' />
+                                <circle cx='0' cy='0' r='6.5' fill='#d9fff2' opacity='.92' />
+                                <path d='M0-8V8M-8 0H8M-6-6 6 6M6-6-6 6' stroke='#0b7a5a' stroke-width='2.2' stroke-linecap='round' />
+                            </g>
+                        </g>
+                    </g>
+                </svg>
+                ";
+        }
+
+        if (key.StartsWith("Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"
+                <svg viewBox='0 0 160 160' class='tariff-scene tariff-scene-house' aria-hidden='true' focusable='false'>
+                    <defs>
+                        <linearGradient id='houseRoofGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#ffb56c' />
+                            <stop offset='100%' stop-color='#d75535' />
+                        </linearGradient>
+                        <linearGradient id='houseRoofSideGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#f58d57' />
+                            <stop offset='100%' stop-color='#a92d24' />
+                        </linearGradient>
+                        <linearGradient id='houseFrontGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#fff8ea' />
+                            <stop offset='100%' stop-color='#f0d4af' />
+                        </linearGradient>
+                        <linearGradient id='houseSideGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#f7e4c5' />
+                            <stop offset='100%' stop-color='#d6b084' />
+                        </linearGradient>
+                        <linearGradient id='houseDoorGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#7f5539' />
+                            <stop offset='100%' stop-color='#5b371f' />
+                        </linearGradient>
+                        <linearGradient id='houseGlassGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#f7feff' />
+                            <stop offset='100%' stop-color='#92d9ff' />
+                        </linearGradient>
+                        <linearGradient id='houseTreeGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#73dc98' />
+                            <stop offset='100%' stop-color='#27874f' />
+                        </linearGradient>
+                    </defs>
+                    <g class='scene-object'>
+                        <g class='house-tree'>
+                            <rect x='35' y='97' width='6' height='22' rx='3' fill='#83563d' />
+                            <circle cx='38' cy='90' r='13' fill='url(#houseTreeGrad)' />
+                            <circle cx='47' cy='95' r='10' fill='url(#houseTreeGrad)' opacity='.92' />
+                        </g>
+                        <path d='M44 73 82 42 119 65 82 88Z' fill='url(#houseRoofGrad)' />
+                        <path d='M82 42 124 65 124 81 82 58Z' fill='url(#houseRoofSideGrad)' />
+                        <path d='M50 79 82 58 82 122 50 127Z' fill='url(#houseFrontGrad)' />
+                        <path d='M82 58 124 81 124 122 82 122Z' fill='url(#houseSideGrad)' />
+                        <path class='house-window' d='M62 85 76 76 76 92 62 100Z' fill='url(#houseGlassGrad)' />
+                        <path class='house-window' d='M92 88 109 97 109 109 92 103Z' fill='url(#houseGlassGrad)' opacity='.95' />
+                        <path d='M66 104 82 95 82 122 66 124Z' fill='url(#houseDoorGrad)' />
+                        <path d='M96 46 105 41 105 62 96 67Z' fill='#f4d3bf' />
+                        <circle class='house-smoke house-smoke-one' cx='112' cy='35' r='7' fill='#ffffff' fill-opacity='.88' />
+                        <circle class='house-smoke house-smoke-two' cx='122' cy='28' r='5' fill='#e0f2fe' fill-opacity='.74' />
+                        <path d='M53 128h62' stroke='#d7e7ff' stroke-width='4' stroke-linecap='round' opacity='.42' />
+                    </g>
+                </svg>
+                ";
+        }
+
+        if (key.StartsWith("Non-Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"
+                <svg viewBox='0 0 160 160' class='tariff-scene tariff-scene-office' aria-hidden='true' focusable='false'>
+                    <defs>
+                        <linearGradient id='officeRoofGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#9fd3ff' />
+                            <stop offset='100%' stop-color='#4c78c9' />
+                        </linearGradient>
+                        <linearGradient id='officeFrontGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#fefefe' />
+                            <stop offset='100%' stop-color='#d7e3f8' />
+                        </linearGradient>
+                        <linearGradient id='officeSideGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#dbe8ff' />
+                            <stop offset='100%' stop-color='#9db7e7' />
+                        </linearGradient>
+                        <linearGradient id='officeCanopyGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#78a9ff' />
+                            <stop offset='100%' stop-color='#335db3' />
+                        </linearGradient>
+                        <linearGradient id='officeGlassGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#ffffff' />
+                            <stop offset='100%' stop-color='#8bcdf7' />
+                        </linearGradient>
+                    </defs>
+                    <g class='scene-object'>
+                        <path d='M47 61 84 43 116 61 79 78Z' fill='url(#officeRoofGrad)' />
+                        <path d='M50 64 79 78 79 127 50 131Z' fill='url(#officeFrontGrad)' />
+                        <path d='M79 78 116 61 116 126 79 126Z' fill='url(#officeSideGrad)' />
+                        <path d='M62 90 89 78 104 85 77 97Z' fill='url(#officeCanopyGrad)' />
+                        <path d='M77 96 95 88 95 126 77 126Z' fill='#8da7db' />
+                        <path class='office-window' d='M58 74 69 69 69 80 58 85Z' fill='url(#officeGlassGrad)' />
+                        <path class='office-window office-window-delay-one' d='M58 91 69 86 69 97 58 102Z' fill='url(#officeGlassGrad)' />
+                        <path class='office-window office-window-delay-two' d='M58 108 69 103 69 114 58 119Z' fill='url(#officeGlassGrad)' />
+                        <path class='office-window office-window-delay-one' d='M87 82 99 76 99 88 87 94Z' fill='url(#officeGlassGrad)' />
+                        <path class='office-window office-window-delay-two' d='M87 99 99 93 99 105 87 111Z' fill='url(#officeGlassGrad)' />
+                        <path class='office-window' d='M102 74 111 69 111 81 102 86Z' fill='url(#officeGlassGrad)' />
+                        <path class='office-sweep' d='M84 47 104 56 91 62 71 53Z' fill='#ffffff' opacity='.36' />
+                        <path class='office-flag' d='M114 45h9l-5 9h-9Z' fill='#dbeafe' opacity='.96' />
+                    </g>
+                </svg>
+                ";
+        }
+
+        if (key.StartsWith("SLT", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"
+                <svg viewBox='0 0 160 160' class='tariff-scene tariff-scene-industry' aria-hidden='true' focusable='false'>
+                    <defs>
+                        <linearGradient id='factoryRoofGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#ffd36f' />
+                            <stop offset='100%' stop-color='#d9971d' />
+                        </linearGradient>
+                        <linearGradient id='factoryFrontGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#f6fbff' />
+                            <stop offset='100%' stop-color='#cfdff3' />
+                        </linearGradient>
+                        <linearGradient id='factorySideGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#d5e5fb' />
+                            <stop offset='100%' stop-color='#8da7d5' />
+                        </linearGradient>
+                        <linearGradient id='factoryAccentGrad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                            <stop offset='0%' stop-color='#7daeff' />
+                            <stop offset='100%' stop-color='#325fb7' />
+                        </linearGradient>
+                    </defs>
+                    <g class='scene-object'>
+                        <path d='M48 78 62 64 76 78 92 62 108 78 108 124 48 124Z' fill='url(#factoryFrontGrad)' />
+                        <path d='M108 78 126 88 126 124 108 124Z' fill='url(#factorySideGrad)' />
+                        <path d='M48 78 62 64 76 78 92 62 108 78 126 88 111 73 95 58 79 74 63 60 48 70Z' fill='url(#factoryRoofGrad)' />
+                        <path d='M84 43 95 39 95 78 84 81Z' fill='#e5edf8' />
+                        <path d='M100 35 112 30 112 74 100 77Z' fill='#d8e3f2' />
+                        <circle class='industry-smoke industry-smoke-one' cx='100' cy='23' r='7' fill='#ffffff' fill-opacity='.88' />
+                        <circle class='industry-smoke industry-smoke-two' cx='112' cy='17' r='5' fill='#e0f2fe' fill-opacity='.74' />
+                        <g class='industry-gear'>
+                            <circle cx='82' cy='102' r='15' fill='url(#factoryAccentGrad)' />
+                            <circle cx='82' cy='102' r='6' fill='#f8fbff' />
+                            <path d='M82 83v8M82 113v8M63 102h8M93 102h8M69 89l6 6M89 109l6 6M69 115l6-6M89 95l6-6' stroke='#f8fbff' stroke-width='4' stroke-linecap='round' />
+                        </g>
+                        <path d='M57 93h11v12H57Zm18 0h11v12H75Zm18 0h11v12H93Z' fill='#9ac5ff' opacity='.82' />
+                    </g>
+                </svg>
+                ";
+        }
+
+        return "<svg viewBox=\"0 0 64 64\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"32\" cy=\"32\" r=\"18\" fill=\"currentColor\" opacity=\".95\"/><circle cx=\"32\" cy=\"32\" r=\"8\" fill=\"#ffffff\" opacity=\".25\"/></svg>";
+    }
+
+    private static string GetCategoryIconMarkup(string category)
+    {
+        if (category.StartsWith("Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            return "&#127968;";
+        }
+
+        if (category.StartsWith("Non-Residential", StringComparison.OrdinalIgnoreCase))
+        {
+            return "&#127970;";
+        }
+
+        if (category.StartsWith("SLT", StringComparison.OrdinalIgnoreCase))
+        {
+            return "&#9889;";
+        }
+
+        if (category.StartsWith("EV", StringComparison.OrdinalIgnoreCase))
+        {
+            return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M7 15h10l1.4-4.2A2 2 0 0 0 16.5 8H8.2l-.7-1.4A2 2 0 0 0 5.7 5H4v2h1.7l3 6H8a2 2 0 0 0-2 2v2h1a2 2 0 1 0 4 0h4a2 2 0 1 0 4 0h1v-2a2 2 0 0 0-2-2h-1.1l.5-1.5H7Zm2 4.5a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5Zm8 0a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5ZM14 3l-2.8 4H13l-1 3l3.8-5H14Z\" fill=\"currentColor\"/></svg>";
+        }
+
+        return "&#128100;";
+    }
+}

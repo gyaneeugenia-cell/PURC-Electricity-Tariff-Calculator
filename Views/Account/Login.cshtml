@@ -1,0 +1,42 @@
+@model LoginViewModel
+@{
+    ViewData["Title"] = "Sign In";
+}
+
+<section class="panel auth-panel">
+    <div class="panel-heading">
+        <h2>Sign In</h2>
+        <p class="panel-subtitle">Access the PURC tariff analytics workspace with your registered credentials.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="message-banner error-banner">@Model.ErrorMessage</div>
+    }
+
+    <form asp-action="Login" method="post" class="auth-form">
+        @Html.AntiForgeryToken()
+        <input asp-for="ReturnUrl" type="hidden" />
+
+        <div class="field-group">
+            <label asp-for="Email"></label>
+            <input asp-for="Email" type="email" autocomplete="username" />
+            <span asp-validation-for="Email" class="form-validation"></span>
+        </div>
+
+        <div class="field-group">
+            <label asp-for="Password"></label>
+            <div class="password-shell">
+                <input asp-for="Password" type="password" autocomplete="current-password" id="loginPassword" />
+                <button type="button" class="password-toggle" data-password-toggle="loginPassword">Show</button>
+            </div>
+            <span asp-validation-for="Password" class="form-validation"></span>
+        </div>
+
+        <div class="auth-actions">
+            <button type="submit" class="primary-button">Sign In</button>
+            <a class="secondary-button button-link" asp-action="Register">Register</a>
+            <a class="secondary-button button-link" asp-action="ForgotPassword">Forgot Password</a>
+        </div>
+    </form>
+</section>

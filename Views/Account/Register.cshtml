@@ -1,0 +1,55 @@
+@model RegisterViewModel
+@{
+    ViewData["Title"] = "Register";
+}
+
+<section class="panel auth-panel">
+    <div class="panel-heading">
+        <h2>Create Account</h2>
+        <p class="panel-subtitle">Strong passwords are required: at least 12 characters with uppercase, lowercase, number, and special character.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="message-banner error-banner">@Model.ErrorMessage</div>
+    }
+
+    <form asp-action="Register" method="post" class="auth-form">
+        @Html.AntiForgeryToken()
+
+        <div class="field-group">
+            <label asp-for="DisplayName"></label>
+            <input asp-for="DisplayName" autocomplete="name" />
+            <span asp-validation-for="DisplayName" class="form-validation"></span>
+        </div>
+
+        <div class="field-group">
+            <label asp-for="Email"></label>
+            <input asp-for="Email" type="email" autocomplete="username" />
+            <span asp-validation-for="Email" class="form-validation"></span>
+        </div>
+
+        <div class="field-group">
+            <label asp-for="Password"></label>
+            <div class="password-shell">
+                <input asp-for="Password" type="password" autocomplete="new-password" id="registerPassword" />
+                <button type="button" class="password-toggle" data-password-toggle="registerPassword">Show</button>
+            </div>
+            <span asp-validation-for="Password" class="form-validation"></span>
+        </div>
+
+        <div class="field-group">
+            <label asp-for="ConfirmPassword"></label>
+            <div class="password-shell">
+                <input asp-for="ConfirmPassword" type="password" autocomplete="new-password" id="registerConfirmPassword" />
+                <button type="button" class="password-toggle" data-password-toggle="registerConfirmPassword">Show</button>
+            </div>
+            <span asp-validation-for="ConfirmPassword" class="form-validation"></span>
+        </div>
+
+        <div class="auth-actions">
+            <button type="submit" class="primary-button">Register</button>
+            <a class="secondary-button button-link" asp-action="Login">Back to Sign In</a>
+        </div>
+    </form>
+</section>
