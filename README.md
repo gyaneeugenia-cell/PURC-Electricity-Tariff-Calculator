@@ -1,83 +1,85 @@
-# PURC Historic Tariff Reckoner C# Migration
+# PURC Electricity Tariff Calculator
 
-This folder contains the first C# migration foundation for your Python-based historic tariff reckoner.
+PURC Electricity Tariff Calculator is an ASP.NET Core web application for electricity tariff analysis, bill reckoning, tariff lookup, historic comparison, and admin-managed tariff maintenance.
 
-## What this version already sets up
+## Overview
 
-- ASP.NET Core backend project structure
-- Direct PostgreSQL access for Supabase using `Npgsql`
-- Typed tariff models for components, tax, levies, period catalog, results, and historic trend rows
-- A reusable C# tariff calculation service for:
-  - Residential forward calculation
-  - Non-residential forward calculation
-  - SLT forward calculation
-  - Reverse bill-to-kWh search
-  - Historic trend generation
-- API endpoints for:
-  - period catalog
-  - category options
-  - calculation
-  - historic trend
-- SQL starter for:
-  - admin users
-  - privileges
-  - audit trail on tariff changes
+The application is designed to help users:
 
-## Why this migration is cleaner than the Python layout
+- calculate electricity bills from consumption input
+- reverse-calculate estimated consumption from a target bill
+- view tariff rates by year, effective period, and customer category
+- review historic tariff information across multiple periods
+- print bill breakdowns for reporting and record keeping
+- manage tariff, tax, and levy records through an admin dashboard
 
-Your current Python app uses many year-specific files such as `tariff_2024_db.py`, `tariff_2025_db.py`, and so on. The C# version starts from a more centralized engine:
+## Key Features
 
-- The database still remains Supabase PostgreSQL
-- The calculator still uses the same tariff tables
-- The engine now applies recurring rule patterns instead of copying the whole calculator per year
+- User authentication and role-based access
+- Tariff calculation for:
+  - Residential
+  - Non-Residential
+  - SLT
+  - EV Charging
+- Tariff rate display with category-specific visual presentation
+- Bill breakdown generation and print-ready output
+- Historic tariff analytics and comparison views
+- Admin dashboard for:
+  - user creation and management
+  - password management
+  - tariff database updates
+  - tax and levy updates
+- PostgreSQL-backed storage with Supabase connectivity
 
-That means new gazetted tariffs can be added with less code duplication.
+## Technology Stack
 
-## Current architecture
+- ASP.NET Core MVC
+- Razor Views
+- C#
+- PostgreSQL / Supabase
+- `Npgsql`
+- HTML, CSS, and JavaScript
 
-- `Controllers/`
-  - HTTP endpoints for catalog, calculation, and trends
-- `Models/`
-  - request/response and database row models
-- `Services/PostgresTariffRepository.cs`
-  - fetches tariff rows, tax rows, levies, periods, and component types
-- `Services/TariffCalculationService.cs`
-  - contains the translated calculation logic from Python into C#
-- `Sql/001_admin_security_audit.sql`
-  - creates the user management and audit structures requested in the meeting
+## Project Structure
 
-## Features from the meeting transcript mapped into this migration
+- `Controllers/`:
+  MVC controllers for authentication, calculation, catalog access, trends, and admin actions
+- `Models/`:
+  request models, view models, response models, and tariff record types
+- `Services/`:
+  core business logic, database repositories, password security, chart layout, and tariff calculation services
+- `Views/`:
+  Razor UI pages for users and administrators
+- `wwwroot/`:
+  static assets including stylesheets, scripts, and images
+- `Sql/`:
+  database setup and supporting SQL scripts
+- `docs/`:
+  supporting implementation notes and technical references
 
-- Maintain Supabase PostgreSQL:
-  - kept; the new code still targets PostgreSQL directly
-- Change programming language to C#:
-  - started here with an ASP.NET Core backend
-- Preserve existing tariff calculation logic:
-  - the C# service mirrors the current Python forward and reverse calculation flow
-- Historic trend:
-  - included as a service plus API endpoint
-- Admin mode:
-  - database tables and audit triggers are provided as the first step
-- User creation / deletion / privileges:
-  - schema included in the SQL starter
-- Track edits, deletions, timestamps, and actors:
-  - implemented through `tariff_change_audit`
-- Print / export / view:
-  - should be implemented next in the C# UI layer or reporting endpoints
+## Local Setup
 
-## Important notes
+### Prerequisites
 
-- `appsettings.json` is kept safe for source control and does not store the live database password.
-- Create a local `appsettings.Development.json` from `appsettings.Development.example.json` and paste your real Supabase PostgreSQL connection string there before running locally.
-- The Python app appears to be stable for Residential, Non-Residential, and SLT paths.
-- The `EV-CHARGING` path in the Python app looks only partially wired; the C# service currently marks that path as pending.
+- .NET 8 SDK
+- Access to the PostgreSQL / Supabase database used by the application
 
-## How to continue once the .NET SDK is available
+### Configuration
 
 1. Copy `appsettings.Development.example.json` to `appsettings.Development.json`.
-2. Paste the real PostgreSQL connection string into `appsettings.Development.json`.
-3. Open this folder in Visual Studio or VS Code.
-4. Run:
+2. Add your live PostgreSQL connection string to `appsettings.Development.json`.
+
+Example:
+
+```json
+{
+  "ConnectionStrings": {
+    "SupabasePostgres": "Host=your-supabase-host;Port=5432;Database=postgres;Username=your-username;Password=your-password;SSL Mode=Require;Trust Server Certificate=true"
+  }
+}
+```
+
+## Running the Application
 
 ```powershell
 dotnet restore
@@ -85,16 +87,13 @@ dotnet build
 dotnet run
 ```
 
-5. Test the endpoints:
-  - `GET /api/catalog/periods`
-  - `GET /api/catalog/categories?yearId=57&period=Q2%202026%20(April)`
-  - `POST /api/calculator/calculate`
-  - `POST /api/trends/historic`
+After the application starts, open the local URL shown in the terminal.
 
-## Recommended next implementation steps
+## Security
 
-1. Add a Razor Pages or Blazor UI so the C# version can replace the Streamlit interface.
-2. Add login, password hashing, and admin authorization.
-3. Add tariff maintenance screens for create/update/delete.
-4. Add CSV/PNG/JPEG/PDF export endpoints.
-5. Add AI analytics as a separate service once the core migration is stable.
+- `appsettings.Development.json` is kept out of source control and should remain local to your machine.
+- Do not commit live database credentials or other secrets to the repository.
+
+## Repository Purpose
+
+This repository contains the main application code for the PURC Electricity Tariff Calculator, including the user-facing interface, admin tools, tariff calculation engine, and database integration.
