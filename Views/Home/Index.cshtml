@@ -1,4 +1,5 @@
 @using System.Text
+@using System.Text.Json
 @model CalculatorPageViewModel
 @{
     ViewData["Title"] = "PURC Electricity Tariff Reckoner";
@@ -89,7 +90,28 @@
     var taxBasisNote = BuildTaxBasisNote(Model.SelectedTariffBundle);
     var levyBasisNote = BuildLevyBasisNote(Model.SelectedCalendarYear, Model.SelectedTariffBundle);
     var currentUserDisplayName = User.Identity?.Name ?? "Unknown user";
+
+    var assistantContext = new
+    {
+        year = Model.SelectedCalendarYear,
+        period = Model.SelectedPeriod,
+        category = Model.SelectedCategory,
+        mode = Model.Mode,
+        hasResults = Model.HasResults,
+        result = Model.CalculationResult is null
+            ? null
+            : new
+            {
+                consumptionKwh = Model.CalculationResult.ConsumptionKwh,
+                totalBill = Model.CalculationResult.TotalBill,
+                demandKva = Model.CalculationResult.DemandKva,
+                isReverseCalculation = Model.CalculationResult.IsReverseCalculation,
+                breakdown = Model.CalculationResult.Breakdown.Select(line => new { line.Label, line.Amount }),
+            },
+    };
 }
+
+<script id="assistantPageContext" type="application/json">@Html.Raw(JsonSerializer.Serialize(assistantContext))</script>
 
 <header class="purc-hero">
     <div class="purc-ribbon">

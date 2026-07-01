@@ -24,6 +24,7 @@ builder.Services.AddScoped<ITariffRepository, PostgresTariffRepository>();
 builder.Services.AddScoped<ITariffCalculationService, TariffCalculationService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddSingleton<IPasswordSecurityService, PasswordSecurityService>();
+builder.Services.AddHttpClient<IAiAssistantService, GeminiAssistantService>();
 
 var app = builder.Build();
 

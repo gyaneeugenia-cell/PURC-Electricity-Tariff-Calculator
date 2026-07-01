@@ -65,7 +65,39 @@
         @RenderBody()
     </main>
 
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <button type="button" id="assistantLauncher" class="assistant-launcher" aria-label="Open AI assistant">
+            <span class="assistant-launcher-icon assistant-icon-chat">&#128172;</span>
+            <span class="assistant-launcher-icon assistant-icon-close">&times;</span>
+        </button>
+
+        <div id="assistantPanel" class="assistant-panel is-hidden" role="dialog" aria-label="AI assistant">
+            <div class="assistant-header">
+                <div>
+                    <p class="assistant-title">PURC Tariff Assistant</p>
+                    <p class="assistant-subtitle">Ask how the reckoner works, or about the calculation on screen</p>
+                </div>
+            </div>
+
+            <div id="assistantMessages" class="assistant-messages"></div>
+
+            <div id="assistantSuggestions" class="assistant-suggestions">
+                <button type="button" class="assistant-suggestion" data-suggestion="How do I reverse-calculate consumption from a total bill?">How do I reverse-calculate consumption from a total bill?</button>
+                <button type="button" class="assistant-suggestion" data-suggestion="Explain the current bill breakdown on screen.">Explain the current bill breakdown on screen.</button>
+                <button type="button" class="assistant-suggestion" data-suggestion="What customer categories are available and when is Max Demand required?">What customer categories are available and when is Max Demand required?</button>
+                <button type="button" class="assistant-suggestion" data-suggestion="How does the Bill Trend Tool work?">How does the Bill Trend Tool work?</button>
+            </div>
+
+            <form id="assistantForm" class="assistant-form">
+                <textarea id="assistantInput" class="assistant-input" rows="1" placeholder="Ask a question…"></textarea>
+                <button type="submit" class="assistant-send" aria-label="Send">&#10148;</button>
+            </form>
+        </div>
+    }
+
     <script src="~/js/app.js" asp-append-version="true"></script>
+    <script src="~/js/assistant.js" asp-append-version="true"></script>
     @RenderSection("Scripts", required: false)
 </body>
 </html>

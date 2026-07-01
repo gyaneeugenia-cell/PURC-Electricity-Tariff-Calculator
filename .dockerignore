@@ -1,0 +1,17 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+.dotnet/
+.nuget/
+artifacts/
+bin_check/
+scratchbuild/
+scratchobj/
+.git/
+appsettings.Development.json
+appsettings.Local.json
+*.user
+run.log
+run.err.log

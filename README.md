@@ -30,6 +30,7 @@ The application is designed to help users:
   - tariff database updates
   - tax and levy updates
 - PostgreSQL-backed storage with Supabase connectivity
+- Built-in AI assistant (floating chat widget) powered by Google Gemini's free tier — answers "how do I…" questions about the app and explains the calculation currently on screen
 
 ## Technology Stack
 
@@ -78,6 +79,29 @@ Example:
   }
 }
 ```
+
+### AI Assistant (optional, free tier)
+
+The app includes a floating AI assistant that answers questions about how the reckoner works and can explain the calculation currently on screen. It is powered by [Google Gemini](https://aistudio.google.com/apikey), which has a free tier — no card required.
+
+To enable it:
+
+1. Get a free API key from https://aistudio.google.com/apikey.
+2. Set it either as an environment variable (recommended for deployment):
+   ```
+   GEMINI_API_KEY=your-key-here
+   ```
+   or in `appsettings.Development.json` for local development:
+   ```json
+   {
+     "AiAssistant": {
+       "GeminiApiKey": "your-key-here",
+       "GeminiModel": "gemini-2.5-flash"
+     }
+   }
+   ```
+
+If no key is set, the assistant widget still appears but replies that it hasn't been enabled yet — the rest of the application is unaffected.
 
 ## Running the Application
 

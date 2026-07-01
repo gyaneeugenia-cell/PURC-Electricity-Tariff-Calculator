@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: purc-tariff-reckoner
+    runtime: docker
+    plan: free
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ConnectionStrings__SupabasePostgres
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
