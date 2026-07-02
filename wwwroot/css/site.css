@@ -75,7 +75,7 @@ body {
 .top-nav-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.6rem 0.8rem;
+    gap: 0.6rem 1.4rem;
     align-items: center;
     justify-content: flex-end;
 }
@@ -107,32 +107,32 @@ body {
     align-items: center;
     justify-content: center;
     min-height: 2.35rem;
-    padding: 0.55rem 0.9rem;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.06);
-    color: #ffffff;
+    padding: 0.4rem 0.15rem;
+    border-radius: 0;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.82);
     text-decoration: none;
     font-size: 0.92rem;
-    font-weight: 700;
-    transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease;
+    font-weight: 600;
+    transition: color 0.16s ease, border-color 0.16s ease;
 }
 
 .nav-link:hover {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.32);
-    transform: translateY(-1px);
+    color: #ffffff;
+    border-bottom-color: rgba(255, 255, 255, 0.4);
 }
 
 .nav-link.is-active {
-    background: rgba(255, 255, 255, 0.16);
-    border-color: rgba(255, 255, 255, 0.34);
-    box-shadow: none;
+    color: #ffffff;
+    border-bottom-color: #ffffff;
+    font-weight: 700;
 }
 
 .nav-link-strong {
-    background: var(--purc-blue-soft);
-    border-color: transparent;
+    color: #ffffff;
+    font-weight: 800;
 }
 
 .nav-logout-form {
@@ -164,26 +164,29 @@ body {
 }
 
 .purc-ribbon {
-    background: var(--purc-blue-strong);
-    color: #ffffff;
-    border-radius: var(--radius) var(--radius) 0 0;
-    padding: 0.65rem 1.15rem;
+    background: transparent;
+    color: var(--purc-blue-strong);
+    border-radius: 0;
+    border-bottom: 1px solid var(--purc-line);
+    padding: 0 0 0.6rem;
+    margin-bottom: 1rem;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.8rem 1.4rem;
+    gap: 0.5rem 1.4rem;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.92rem;
-    font-weight: 600;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
 }
 
 .purc-brand-card {
-    background: #ffffff;
-    border: 1px solid var(--purc-line);
-    border-top: none;
-    border-radius: 0 0 var(--radius) var(--radius);
+    background: transparent;
+    border: none;
+    border-radius: 0;
     box-shadow: none;
-    padding: 1.25rem 1.4rem 1.35rem;
+    padding: 0;
 }
 
 .purc-brand {
@@ -231,11 +234,12 @@ body {
 }
 
 .panel {
-    background: #ffffff;
-    border: 1px solid var(--purc-line);
-    border-radius: var(--radius);
-    padding: 1.35rem 1.5rem 1.5rem;
-    margin-bottom: 1.35rem;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--purc-line);
+    border-radius: 0;
+    padding: 0 0 1.75rem;
+    margin-bottom: 1.75rem;
     box-shadow: none;
 }
 
@@ -328,14 +332,14 @@ body {
 .field-group input,
 .field-group select {
     width: 100%;
-    border: 1px solid #c5d4ea;
-    border-radius: 12px;
+    border: 1px solid #c9d5e6;
+    border-radius: var(--radius-sm);
     padding: 0.76rem 0.9rem;
     min-height: 49px;
-    background: var(--purc-surface-strong);
+    background: #ffffff;
     font-size: 1rem;
     color: var(--purc-black);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    box-shadow: none;
 }
 
 .field-group input:focus,
