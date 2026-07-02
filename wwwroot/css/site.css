@@ -539,6 +539,11 @@ body {
 .auth-panel {
     max-width: 760px;
     margin: 2rem auto 0;
+    background: #ffffff;
+    border: 1px solid var(--purc-line);
+    border-radius: var(--radius);
+    padding: 1.85rem 2rem 2.1rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
 .auth-form {
