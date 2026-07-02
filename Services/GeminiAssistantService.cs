@@ -22,16 +22,21 @@ public sealed class GeminiAssistantService : IAiAssistantService
     {
         _httpClient = httpClient;
 
-        _apiKey = configuration["AiAssistant:GeminiApiKey"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
-            ?? string.Empty;
+        _apiKey = FirstNonBlank(
+            configuration["AiAssistant:GeminiApiKey"],
+            Environment.GetEnvironmentVariable("GEMINI_API_KEY")) ?? string.Empty;
 
-        _model = configuration["AiAssistant:GeminiModel"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_MODEL")
-            ?? DefaultModel;
+        _model = FirstNonBlank(
+            configuration["AiAssistant:GeminiModel"],
+            Environment.GetEnvironmentVariable("GEMINI_MODEL")) ?? DefaultModel;
     }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_apiKey);
+
+    private static string? FirstNonBlank(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
 
     public async Task<string> AskAsync(
         string question,
