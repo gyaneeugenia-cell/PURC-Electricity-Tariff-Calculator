@@ -10,6 +10,10 @@
     --purc-surface: rgba(255, 255, 255, 0.82);
     --purc-surface-strong: rgba(255, 255, 255, 0.94);
     --purc-shadow: 0 12px 34px rgba(36, 74, 129, 0.11);
+    --purc-line: rgba(15, 23, 42, 0.09);
+    --purc-line-soft: rgba(15, 23, 42, 0.06);
+    --radius: 10px;
+    --radius-sm: 8px;
     --table-head-start: #5079b2;
     --table-head-end: #3d649c;
     --table-row-odd: rgba(249, 251, 255, 0.94);
@@ -30,9 +34,7 @@ html {
 body {
     margin: 0;
     font-family: "Segoe UI", Arial, sans-serif;
-    background:
-        radial-gradient(circle at top left, rgba(49, 95, 163, 0.12), transparent 28%),
-        linear-gradient(135deg, #dfe8f5 0%, #edf4fc 100%);
+    background: #f2f4f8;
     color: var(--purc-text);
 }
 
@@ -123,13 +125,13 @@ body {
 }
 
 .nav-link.is-active {
-    background: linear-gradient(135deg, rgba(79, 116, 180, 0.96) 0%, rgba(36, 74, 129, 0.96) 100%);
+    background: rgba(255, 255, 255, 0.16);
     border-color: rgba(255, 255, 255, 0.34);
-    box-shadow: 0 10px 24px rgba(36, 74, 129, 0.18);
+    box-shadow: none;
 }
 
 .nav-link-strong {
-    background: linear-gradient(135deg, var(--purc-blue-soft) 0%, var(--purc-blue) 100%);
+    background: var(--purc-blue-soft);
     border-color: transparent;
 }
 
@@ -162,25 +164,25 @@ body {
 }
 
 .purc-ribbon {
-    background: linear-gradient(90deg, #4256ab 0%, #4e62b5 100%);
+    background: var(--purc-blue-strong);
     color: #ffffff;
-    border-radius: 18px 18px 0 0;
-    padding: 0.75rem 1.15rem;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 0.65rem 1.15rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.8rem 1.4rem;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     font-weight: 600;
 }
 
 .purc-brand-card {
-    background: linear-gradient(135deg, #ffffff 0%, #f6f9ff 100%);
-    border: 1px solid rgba(180, 192, 214, 0.75);
+    background: #ffffff;
+    border: 1px solid var(--purc-line);
     border-top: none;
-    border-radius: 0 0 22px 22px;
-    box-shadow: var(--purc-shadow);
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: none;
     padding: 1.25rem 1.4rem 1.35rem;
 }
 
@@ -229,13 +231,12 @@ body {
 }
 
 .panel {
-    background: var(--purc-surface);
-    border: 1px solid var(--purc-border);
-    border-radius: 20px;
-    padding: 1.2rem 1.25rem 1.35rem;
+    background: #ffffff;
+    border: 1px solid var(--purc-line);
+    border-radius: var(--radius);
+    padding: 1.35rem 1.5rem 1.5rem;
     margin-bottom: 1.35rem;
-    box-shadow: var(--purc-shadow);
-    backdrop-filter: blur(10px);
+    box-shadow: none;
 }
 
 .panel h2,
@@ -376,16 +377,14 @@ body {
     gap: 0.8rem;
     min-width: 190px;
     padding: 0.7rem 0.9rem;
-    background: rgba(255, 255, 255, 0.88);
-    border: 1px solid #c6d4e8;
-    border-radius: 14px;
+    background: transparent;
+    border: 1px solid var(--purc-line);
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+    transition: border-color 0.16s ease, background 0.16s ease;
 }
 
 .preference-card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(36, 74, 129, 0.12);
     border-color: #9fb6d8;
 }
 
@@ -394,10 +393,9 @@ body {
 }
 
 .preference-card.is-selected {
-    background: linear-gradient(135deg, #244a81 0%, #315fa3 100%);
+    background: var(--purc-blue);
     border-color: transparent;
     color: #ffffff;
-    box-shadow: 0 12px 30px rgba(36, 74, 129, 0.22);
 }
 
 .preference-card-icon {
@@ -456,39 +454,49 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
-    border: none;
-    border-radius: 12px;
-    padding: 0.84rem 1.2rem;
-    min-height: 48px;
-    font-size: 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 0.72rem 1.15rem;
+    min-height: 46px;
+    font-size: 0.98rem;
     font-weight: 700;
     text-decoration: none;
     cursor: pointer;
-    transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
-}
-
-.primary-button:hover,
-.secondary-button:hover,
-.button-link:hover {
-    transform: translateY(-1px);
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
 .primary-button {
-    background: linear-gradient(135deg, #244a81 0%, #315fa3 100%);
+    background: var(--purc-blue);
     color: #ffffff;
-    box-shadow: 0 12px 28px rgba(36, 74, 129, 0.2);
+    box-shadow: none;
+}
+
+.primary-button:hover {
+    background: var(--purc-blue-strong);
 }
 
 .secondary-button,
 .button-link {
-    background: rgba(255, 255, 255, 0.88);
+    background: transparent;
     color: var(--purc-blue-strong);
-    border: 1px solid #c6d4e8;
-    box-shadow: 0 8px 18px rgba(36, 74, 129, 0.08);
+    border-color: var(--purc-line);
+    box-shadow: none;
+}
+
+.secondary-button:hover,
+.button-link:hover {
+    background: rgba(36, 74, 129, 0.06);
+    border-color: var(--purc-blue-soft);
 }
 
 .trend-tool-button.is-active {
-    background: linear-gradient(135deg, #cc3d3d 0%, #dd5a5a 100%);
+    background: var(--purc-red);
+    color: #ffffff;
+    border-color: transparent;
+}
+
+.trend-tool-button.is-active:hover {
+    background: #b33333;
 }
 
 .trend-tool-button-icon {
@@ -547,9 +555,9 @@ body {
 .password-toggle {
     min-height: 49px;
     padding: 0.68rem 0.95rem;
-    border-radius: 12px;
-    border: 1px solid #c7d5e8;
-    background: rgba(255, 255, 255, 0.95);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--purc-line);
+    background: transparent;
     color: var(--purc-blue-strong);
     font-size: 0.94rem;
     font-weight: 800;
@@ -557,7 +565,8 @@ body {
 }
 
 .password-toggle:hover {
-    background: #f1f6fc;
+    background: rgba(36, 74, 129, 0.06);
+    border-color: var(--purc-blue-soft);
 }
 
 .auth-actions {
@@ -572,10 +581,11 @@ body {
     flex-direction: column;
     gap: 0.35rem;
     margin-bottom: 1rem;
-    padding: 1rem 1.1rem;
-    border-radius: 16px;
-    background: rgba(36, 74, 129, 0.08);
-    border: 1px solid rgba(109, 136, 176, 0.3);
+    padding: 0.2rem 0 0.2rem 1rem;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-left: 2px solid var(--purc-blue-soft);
 }
 
 .reset-token-box span,
@@ -606,10 +616,9 @@ body {
 
 .rate-meta-card,
 .result-meta-card {
-    padding: 0.85rem 0.95rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.68);
-    border: 1px solid rgba(183, 198, 220, 0.66);
+    padding: 0 0.95rem 0 0;
+    border-left: 2px solid var(--purc-line);
+    padding-left: 0.9rem;
 }
 
 .rate-meta-card span,
@@ -1252,10 +1261,8 @@ body {
 }
 
 .bill-breakdown-meta-item {
-    padding: 0.78rem 0.9rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.78);
-    border: 1px solid rgba(181, 195, 217, 0.68);
+    padding-left: 0.9rem;
+    border-left: 2px solid var(--purc-line);
 }
 
 .bill-breakdown-meta-item span {
@@ -1281,7 +1288,7 @@ body {
 }
 
 .breakdown-table thead th {
-    background: linear-gradient(180deg, var(--table-head-start) 0%, var(--table-head-end) 100%);
+    background: var(--purc-blue-strong);
     color: #ffffff;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1316,12 +1323,12 @@ body {
 .category-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.72rem;
-    padding: 0.78rem 0.96rem;
+    gap: 0.6rem;
+    padding: 0;
     margin-bottom: 1rem;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.84);
-    border: 1px solid rgba(180, 193, 215, 0.72);
+    background: transparent;
+    border: none;
+    color: var(--purc-black);
     font-size: 1.24rem;
     font-weight: 800;
 }
@@ -1330,12 +1337,12 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.9rem;
-    height: 2.9rem;
+    width: 2.2rem;
+    height: 2.2rem;
     border-radius: 999px;
-    background: linear-gradient(135deg, #244a81 0%, #315fa3 100%);
+    background: var(--purc-blue);
     color: #ffffff;
-    font-size: 1.35rem;
+    font-size: 1.1rem;
 }
 
 .category-chip-icon svg {
@@ -1424,10 +1431,11 @@ body {
 .chart-card {
     max-width: 760px;
     margin: 1.15rem auto 0;
-    background: rgba(255, 255, 255, 0.78);
-    border-radius: 18px;
-    padding: 0.85rem 0.95rem 0.7rem;
-    border: 1px solid rgba(173, 188, 209, 0.55);
+    background: transparent;
+    border-radius: 0;
+    padding: 0.85rem 0 0.7rem;
+    border: none;
+    border-top: 1px solid var(--purc-line);
 }
 
 .chart-card-heading {
@@ -1598,10 +1606,11 @@ body {
     display: grid;
     gap: 0.38rem;
     margin-bottom: 1rem;
-    padding: 1rem 1.05rem;
-    border-radius: 16px;
-    background: linear-gradient(135deg, rgba(36, 74, 129, 0.1) 0%, rgba(255, 255, 255, 0.92) 100%);
-    border: 1px solid rgba(124, 152, 195, 0.42);
+    padding: 0.2rem 0 0.2rem 1.05rem;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-left: 2px solid var(--purc-blue-soft);
 }
 
 .admin-warning-box strong {
@@ -1627,10 +1636,11 @@ body {
 }
 
 .admin-tariff-section {
-    padding: 1rem;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.72);
-    border: 1px solid rgba(188, 201, 222, 0.65);
+    padding: 0 0 0 1rem;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-left: 2px solid var(--purc-line);
 }
 
 .admin-shell {
@@ -1653,9 +1663,8 @@ body {
 .admin-table {
     width: 100%;
     border-collapse: collapse;
-    background: rgba(255, 255, 255, 0.72);
-    border-radius: 16px;
-    overflow: hidden;
+    background: transparent;
+    border-radius: 0;
 }
 
 .admin-table th,
@@ -1682,7 +1691,7 @@ body {
 }
 
 .admin-table th {
-    background: linear-gradient(135deg, var(--purc-blue) 0%, var(--purc-blue-soft) 100%);
+    background: var(--purc-blue-strong);
     color: #ffffff;
     font-weight: 900;
     white-space: nowrap;
@@ -1726,12 +1735,18 @@ body {
 }
 
 .admin-action-button {
-    border: 1px solid transparent;
-    background: linear-gradient(135deg, var(--purc-blue) 0%, var(--purc-blue-soft) 100%);
-    color: #ffffff;
+    border: 1px solid var(--purc-line);
+    background: transparent;
+    color: var(--purc-blue-strong);
     cursor: pointer;
-    box-shadow: 0 8px 18px rgba(36, 74, 129, 0.14);
+    box-shadow: none;
     white-space: nowrap;
+    transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.admin-action-button:hover {
+    background: rgba(36, 74, 129, 0.06);
+    border-color: var(--purc-blue-soft);
 }
 
 .admin-inline-timestamp {
@@ -1760,10 +1775,11 @@ body {
 }
 
 .audit-log-card {
-    padding: 0.9rem 1rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.76);
-    border: 1px solid rgba(190, 202, 224, 0.72);
+    padding: 0 0 0 1rem;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-left: 2px solid var(--purc-line);
 }
 
 .audit-log-card strong {
@@ -2273,9 +2289,9 @@ body {
     height: 3.4rem;
     border-radius: 999px;
     border: none;
-    background: linear-gradient(135deg, var(--purc-blue-soft) 0%, var(--purc-blue) 100%);
+    background: var(--purc-blue);
     color: #ffffff;
-    box-shadow: var(--purc-shadow);
+    box-shadow: 0 4px 14px rgba(36, 74, 129, 0.22);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2315,10 +2331,10 @@ body {
     max-height: 75vh;
     display: flex;
     flex-direction: column;
-    background: var(--purc-surface-strong);
-    border: 1px solid var(--purc-border);
-    border-radius: 1rem;
-    box-shadow: var(--purc-shadow);
+    background: #ffffff;
+    border: 1px solid var(--purc-line);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
     overflow: hidden;
 }
 
@@ -2328,7 +2344,7 @@ body {
 
 .assistant-header {
     padding: 0.85rem 1rem;
-    background: linear-gradient(135deg, var(--purc-blue-soft) 0%, var(--purc-blue) 100%);
+    background: var(--purc-blue-strong);
     color: #ffffff;
 }
 
@@ -2397,10 +2413,10 @@ body {
 
 .assistant-suggestion {
     text-align: left;
-    border: 1px solid var(--purc-border);
-    background: var(--purc-surface);
+    border: 1px solid var(--purc-line);
+    background: transparent;
     color: var(--purc-blue-strong);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-sm);
     padding: 0.45rem 0.6rem;
     font-size: 0.76rem;
     cursor: pointer;
