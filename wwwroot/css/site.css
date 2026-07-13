@@ -200,6 +200,7 @@ body {
     max-width: 34vw;
     height: auto;
     flex: 0 0 auto;
+    mix-blend-mode: multiply;
 }
 
 .purc-brand-copy {
